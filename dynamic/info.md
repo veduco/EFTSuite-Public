@@ -6,7 +6,8 @@ This function will allow OpenEFT 2 to interface with a physical fingerprint scan
 The following devices are known to work with OpenEFT 2:
 * Integrated Biometrics Kojak
 * Possibly other IB ten-print scanners that use the same SDK
-*Please note*: We will not be adding support for Identification International devices (like the i3), as the company was not willing to provide the SDK for integration. If you have access to the SDK and would like us to help with integration, please reach out.
+
+> *Please note*: We will not be adding support for Identification International devices (like the i3), as the company was not willing to provide the SDK for integration. If you have access to the SDK and would like us to help with integration, please reach out.
 # View/Edit EFT
 ## Read Only Mode
 This mode will allow you to read an EFT's contents. It will display both the raw an2k output as well as the Type 2 (demographic) and Type-14 (print) records.
