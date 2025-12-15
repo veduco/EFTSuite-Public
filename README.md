@@ -2,7 +2,7 @@
 
 # Welcome to OpenEFT 2!
 
-![OpenEFT Logo](static/oeftlogo-blk.png "OpenEFT Logo")
+![OpenEFT Logo](webapp/static/oeftlogo-blk.png "OpenEFT Logo")
 
 OpenEFT 2 is a lightweight web application for converting physical fingerprint cards into digital EFT files for use with ATF's eForms application.
 
@@ -40,7 +40,13 @@ docker build -t openeft2 .
 docker pull robbstumpf/openeft2:latest
 ```
 
-![Pull OpenEFT 2 via Docker Hub](static/img/docker1.jpg "Pull OpenEFT 2 via Docker Hub")
+**Important**: If you are on macOS / Apple Silicon, you'll need to specify the platform or you will get an error:
+
+```bash
+docker pull --platform linux/x86_64 robbstumpf/openeft2
+```
+
+![Pull OpenEFT 2 via Docker Hub](webapp/static/img/docker1.jpg "Pull OpenEFT 2 via Docker Hub")
 
 *Note: The build process compiles NBIS tools from source and may take a few minutes.*
 
@@ -57,7 +63,7 @@ If pulled from Docker Hub...
 ```bash
 docker run -p 8080:8080 robbstumpf/openeft2
 ```
-![Run Docker container](static/img/docker2.jpg "Run Docker container")
+![Run Docker container](webapp/static/img/docker2.jpg "Run Docker container")
 
 ### 3. Access the Application
 Open your browser and navigate to:
@@ -68,14 +74,14 @@ Open your browser and navigate to:
 
 ### **Upload Card**
 
-![FD258 upload](static/img/2.jpg "FD258 upload")
+![FD258 upload](webapp/static/img/2.jpg "FD258 upload")
 
 Select your scanned FD-258 image (JPG/PNG).
 
 
 ### **Crop & Rotate**
 
-![FD258 crop](static/img/3.jpg "FD258 crop")
+![FD258 crop](webapp/static/img/3.jpg "FD258 crop")
 
 - Use the **Rotate** buttons to orient the card upright.
 - Drag a box around the actual card area (excluding scanner bed background).
@@ -84,14 +90,14 @@ Select your scanned FD-258 image (JPG/PNG).
 
 ### **Select Print Type**
 
-![Select print type](static/img/4.jpg "Select print type")
+![Select print type](webapp/static/img/4.jpg "Select print type")
 
 - Select your desired print type. We recommend going with the ATF-complaint Type-14 records, as the rolled (Type 4) are not used by the ATF.
 
 
 ### **Verify Boxes**
 
-![Verify bounding boxes](static/img/5.jpg "Verify bounding boxes")
+![Verify bounding boxes](webapp/static/img/5.jpg "Verify bounding boxes")
 
 You will see the aligned image with boxes around the expected fingerprint locations.
 - **Drag** boxes to move them.
@@ -101,18 +107,18 @@ You will see the aligned image with boxes around the expected fingerprint locati
 
 ### **Enter Data**
 
-![Personal details](static/img/6.jpg "Personal details")
+![Personal details](webapp/static/img/6.jpg "Personal details")
 
 Fill out the required fields.
 
 
 ### **Verify Details**
 
-![Verify details](static/img/7.jpg "Verify details")
+![Verify details](webapp/static/img/7.jpg "Verify details")
 
 Final confirmation is presented of your personal details and the fingerprint images
 
-![Download EFT](static/img/8.jpg "Download EFT")
+![Download EFT](webapp/static/img/8.jpg "Download EFT")
 
 
 ### **Download**
