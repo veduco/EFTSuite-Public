@@ -1,0 +1,218 @@
+Type-1 Records: Header Records
+Information about the EFT file itself.
+
+"1.001":"LEN", # LOGICAL RECORD LENGTH
+The total count of the number of bytes in this Type-1 logical record. Field 1.01 shall begin with "1.01:", followed by the length of the record including every character of every field contained in the record and the information separators. The number of characters added to the record by the LEN field itself shall be included in calculating the value of LEN.
+
+"1.002":"VER", # VERSION
+This field should always be 0200
+
+"1.003":"CNT", # FILE CONTENT
+List each of the logical records in the logical file by record type. Also specifies the order in which the remaining logical records shall appear in the file. Consist of one or more subfields. Each subfield shall contain two information items describing a single logical record found in the current logical file. The subfields shall be entered in the same order in which the logical records shall be transmitted. When more than one subfield is used, the RS separator character shall be entered between the subfields. With the addition of the Type-10 record, the first information item of each subfield may now be a one- or two-digit integer (giving the logical record type.) The remaining edit
+specifications pertaining to CNT are unchanged.
+
+The first subfield shall relate to this Type-1 transaction record. The first information item within this subfield shall be the single character indicating that this is a Type-1 record consisting of header information (the numeral "1" selected from the ANSI Standard Table 1). The second information item of this subfield shall be the sum of the Type-2 plus Type-3 plus Type-4 plus Type-5 plus Type-6 plus Type-7 plus Type-8 plus Type-9 plus Type-10 records contained in this logical file. This number is also equal to the count of the remaining subfields of Field 1.03. The US separator character shall be entered between the first and second information
+items.
+
+The remaining subfields of Field 1.03 pertaining to Type-2, Type-3, Type-4, Type-5, Type-6, Type-7, Type-8, Type-9 and Type-10 records contained in the file shall each be comprised of two information items. The first information item shall be one or two characters chosen from one of the following: the ANSI Standard Table 1 that states the record type. The second information item shall be the IDC associated with the logical record pertaining to that subfield.
+The IDC shall be a positive integer equal to or greater than zero. The US character shall be used to separate the two information items.
+
+"1.004":"TOT", # TYPE OF TRANSACTION
+Should always be "FAUF"
+
+"1.005":"DAT", # DATE
+This mandatory field shall contain the date that the transaction was initiated. The date shall appear as eight digits in the format CCYYMMDD. The CCYY characters shall represent the year of the transaction; the MM characters shall be the tens and units values of the month; and the DD characters shall be the day in the month. For example, 19920601 represents June 1, 1992. The complete date shall not exceed the current date.
+
+"1.006":"PRY", # TRANSACTION PRIORITY
+Should always be "4"
+
+"1.007":"DAI", # DESTINATION AGENCY IDENTIFIER
+Should always be "WVIAFIS0Z"
+
+"1.008":"ORI", # ORIGINATING AGENCY IDENTIFIER
+Should always be "WVATF0800"
+
+"1.009":"TCN", # TRANSACTION CONTROL NUMBER
+A unique control identifier - create this by using the date in YYMMDD format + the user's initials + the last 4 of their SSN (eg: 251125-RCS-1234). It should be a 10-byte to 40-byte alphanumeric-special (ANS) field.
+
+"1.011":"NSR", # NATIVE SCANNING RESOLUTION <- Should always be 00.00
+
+"1.012":"NTR", # NOMINAL TRANSMITTING RESOLUTION <- Should always be 00.00
+
+---
+
+Type-2 Biographic Record
+Information about the person fingerprinted
+
+"2.001":"LEN", # LOGICAL RECORD LENGTH
+"LEN 2.001 - LOGICAL RECORD LENGTH. This field contains the length of the logical record specifying the total number of bytes, including every character of every field contained in the record. The number of characters added to the record by the LEN field itself shall be included in calculating the value of LEN."
+
+"2.002":"IDC", # IMAGE DESIGNATION CHARACTER
+Should always be "00"
+
+"2.005":"RET", # RETENTION CODE
+Should always be "N"
+
+"2.016":"SOC", # SOCIAL SECURITY ACCOUNT NUMBER
+This number shall be entered as nine consecutive digits with no embedded punctuation characters. Should be in the format of #########
+
+"2.018":"NAM", # NAME
+This alpha-special field contains the name(s) of the subject. The format shall be the surname followed by a comma (,) followed by the given name(s), which are separated by a space. If no middle name is given, the middle name should be "NMN". EXAMPLES: "Last, First Middle", or "Doe, John NMN"
+
+"2.020":"POB", # PLACE OF BIRTH
+The subject’s place of birth shall be entered in this field. Reference "State and Country Codes.txt" for the key for this field.
+
+"2.021":"CTZ", # COUNTRY OF CITIZENSHIP
+Should always be "US"
+
+"2.022":"DOB", # DATE OF BIRTH
+This field contains the date of birth. It is entered as an eight-digit number in the same format as 1.005
+
+"2.024":"SEX", # SEX
+One letter only (Male = M; Female = F; Other = X)
+
+"2.025":"RAC", # RACE
+One letter (Asian = A; Black = B; Hispanic/Latino = W; American Indian = I; White = W; Unknown = U)
+
+"2.027":"HGT", # HEIGHT
+This field contains the subject’s height as a three-character value. If reported in feet and inches, the first (leftmost) digit is used to show feet while the two rightmost digits are used to show the inches between 00 and 11. If height is unknown, 000 is entered. The allowable range is 400 to 711. Heights outside this range should be set to 000.
+
+"2.029":"WGT", # WEIGHT
+In this field the subject’s weight in pounds is entered. If weight is unknown, 000 is entered. All weights in excess of 499 pounds will be set to 499 lbs.
+
+"2.031":"EYE", # COLOR EYES
+The three-letter code to indicate the subject's color of eyes (Black = BLK; Blue = BLU; Brown = BRO; Gray = GRY; Green = GRN; Hazel = HAZ; Multi = MUL; Unknown = XXX)
+
+"2.032":"HAI", # HAIR COLOR
+The three-letter code to indicate the subject’s color of hair (Bald = BAL; Black = BLK; Blonde = BLN; Brown = BRO; Gray = GRY; Red = RED; Unknown = XXX).
+
+"2.037":"RFP", # REASON FINGERPRINTED
+Should always be "Firearms"
+
+"2.038":"DPR", # DATE PRINTED
+Should always match the value in 1.005.
+
+"2.073":"CRI", # CONTROLLING AGENCY IDENTIFIER
+Should always be "WVATF0800"
+
+---
+
+Type-4 Records
+Explanation: "Rolled" prints
+
+"4.001":"LEN", # Record Header (LOGICAL RECORD LENGTH)
+This mandatory four-byte field contains the length of this Type-4 record, and specifies the total number of bytes including every byte of every field contained in the record. The number of characters added to the record by the LEN field itself shall be included in calculating the value of LEN. 
+
+"4.002":"IDC", # Information designation character
+- Right thumb = "1"
+- Right index = "2"
+- Right middle = "3"
+- Right ring = "4"
+- Right little = "5"
+- Left thumb = "6"
+- Left index = "7"
+- Left middle = "8"
+- Left ring = "9"
+- Left little = "10"
+- Plain right thumb = "11"
+- Plain left thumb = "12"
+- Plain right four fingers = "13"
+- Plain left four fingers = "14"
+
+"4.003":"IMP", # Impression Type
+- Rolled print (4.002 = 1-10) = "1"
+- Flat print (4.002 = 11-14) = "0"
+
+"4.004:a":"FGP", # Friction Ridge Generalized position
+Should always match the value in "4.002"
+
+"4.004:b":"FGP", # Friction Ridge Generalized position
+Should always be "255"
+
+"4.004:c":"FGP", # Friction Ridge Generalized position
+Should always be "255"
+
+"4.004:d":"FGP", # Friction Ridge Generalized position
+Should always be "255"
+
+"4.004:e":"FGP", # Friction Ridge Generalized position
+Should always be "255"
+
+"4.004:f":"FGP", # Friction Ridge Generalized position
+Should always be "255"
+
+"4.005":"ISR", # Image scanning resolution
+Should always be "0"
+
+"4.006":"HLL", # Horizontal Line Length
+- If value of "4.002" = 1-10, the value of "4.006" should always be "800"
+- If value of "4.002" = 11-12, the value of "4.006" should always be "400"
+- If value of "4.002" = 13-14, the value of "4.006" should always be "1600"
+
+"4.007":"VLL", # Vertical Line Length
+- If value of "4.002" = 1-10, the value of "4.007" should always be "750"
+- If value of "4.002" = 11-12, the value of "4.007" should always be "572"
+- If value of "4.002" = 13-14, the value of "4.007" should always be "1000"
+
+"4.008":"CGA", # Compression Algorithm
+Should always be "1"
+
+---
+
+Type-14 Records
+Explanation: For non-criminal justice purposes (eg: when 1.004 = FAUF), Type-14 records will be 2x Plain Simultaneous 4 Finger Impressions (Left slap + Right Slap) and 1x record containing the combined Left and Right Thumb Impression.
+
+"14.001":"LEN", # LOGICAL RECORD LENGTH
+This mandatory ASCII field shall contain the total count of the number of bytes in the Type-14 logical record. Field 14.001 shall specify the length of the record, including every character of every field contained in the record, and the information separators.
+
+"14.002":"IDC", # IMAGE DESIGNATION CHARACTER
+Should always be "1"
+
+"14.003":"IMP", # IMPRESSION TYPE
+Should always be "1"
+
+"14.004":"SRC", # SOURCE AGENCY/ORI
+Should always be "WVATF0800"
+
+"14.005":"LCD", # TENPRINT CAPTURE DATE
+Should always match the value in 1.005
+
+"14.006":"HLL", # HORIZONTAL LINE LENGTH
+Contains the number of pixels contained on a single horizontal line of the transmitted image.
+
+"14.007":"VLL", # VERTICAL LINE LENGTH
+Contains the number of horizontal lines contained in the transmitted image.
+
+"14.008":"SLC", # SCALE UNITS
+Should always be "1"
+
+"14.009":"HPS", # HORIZONTAL PIXEL SCALE
+Should always be "2400"
+
+"14.010":"VPS", # VERTICAL PIXEL SCALE
+Should always be "2400"
+
+"14.011":"CGA", # COMPRESSION ALGORITHM
+Should always be "JP2"
+
+"14.012":"BPX", # BITS PER PIXEL
+Should always be "8"
+
+"14.013":"FGP", # FINGER POSITION
+Contain finger position code that matches the ten-print image, entered as a one- or two-character
+ASCII subfield (Plain right four fingers = 13, plain left four fingers = 14, left and right thumbs = 15).
+
+"14.021":"SEG", # FINGERPRINT SEGMENT POSITION(S)
+Contains offsets to the locations of image segments containing the individual fingers within the image. The offsets are relative to the origin, (0,0), which is in the upper left corner of the image. The horizontal offsets (X) are the pixel counts to the right, and the vertical offsets (Y) are the pixel counts down.
+
+A finger segment is defined by the FINGER NUMBER, the X coordinates (LEFT, RIGHT) and the Y coordinates (TOP, BOTTOM), of its bounding box. The five information items within a finger segment definition are separated by the <US> separator. Individual finger segment definitions are separated by the <RS> separator
+
+"14:021:a":"FRSP", # Friction Ridge Segment Position
+"14:021:b":"LHC", # Left Horizontal Coordinate"
+"14:021:c":"RHC", # Right Horizontal Coordinate
+"14:021:d":"TVC", # Top Vertical Coordinate
+"14:021:e":"BVC", # Bottom Vertical Coordinate
+
+Remember that individual fingers are TYPE-4 records. Slaps/Thumbs are Type 14 records.
+
+More information on the EFT specifications can be found here: https://fbibiospecs.fbi.gov/file-repository/efts71.pdf

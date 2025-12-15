@@ -1,0 +1,60 @@
+# EBTS Specifications for Amputated or Unprintable (eg: Bandaged) Fingerprints
+
+The Amputated or Bandaged (AMP) field is to be included for every amputated or unprintable (eg: bandaged) finger.
+
+There are TWO types of AMP fields:
+- 2.084: used with Type-4 Records AND Type-14 Records (explained below)
+- 14.018: used with Type-14 Records (explained below)
+
+This repeating field contains information about amputated or bandaged fingerprints in an EBTS submission. The field is composed of repeating sets of two information items:
+
+A. Finger Position (FGP)
+B. Amputated Or Bandaged Code (AMPCD)
+
+---
+*Type 4 Records* (2.084)
+This field is to be used any time there are fewer than ten printable fingers in a tenprint (Type 4) submission for finger positions 1 – 10 or positions 11–15 to specify when no slap fingerprint images are provided in the finger positions (e.g., entire right hand is not printed). A partially amputated finger should be printed and be marked amputated, XX.
+
+If the finger’s image is missing for any reason, the UP code should be used. This field is used to tell the AFIS which finger positions need to be characterized. The UP code should only be used when the entire image is not provided for fingerprints in the submission. This code will indicate that the AFIS matcher should ignore this image and not include the image in the matching process.
+
+The following example indicates that the third finger is amputated and that the ninth finger print was unavailable or not submitted:
+- Example: 2.084:03{US}XX{RS}09{US}UP{GS}
+
+---
+*Type 14 Records* (2.084, 14.018)
+When submitting transactions with Type-14 records, the Type-2 AMP (2.084) field should be used to indicate when there is an image missing (e.g., an entire slap).
+
+The Type-14 AMP (14.018) field should be used to indicate a missing or bandaged finger within an image (e.g., a missing index finger in a slap image).
+
+---
+*Encoding Rules*
+For the traditional encoding, the two-character finger position code is followed by the {US} separator and the amputated or bandaged code. Each set of fingers/amp codes shall be separated by the {RS} separator.
+
+The following example indicates that the third finger is amputated and that the ninth finger print was unavailable or not submitted:
+- Example: 2.084:03{US}XX{RS}09{US}UP{GS}
+
+---
+*AMP Codes Table*
+(Finger Position;FGP)
+- Right thumb;01
+- Right index;02
+- Right middle;03
+- Right ring;04
+- Right little;05
+- Left thumb;06
+- Left index;07
+- Left middle;08
+- Left ring;09
+- Left little;10
+- Plain right thumb;11
+- Plain left thumb;12
+- Plain right four fingers;13
+- Plain left four fingers;14
+- Plain left and right thumbs;15
+
+Note: When codes 13, 14, and/or 15 are included, the entire block is referenced.
+
+*Amp Codes Table*
+(Reason;Code)
+- Amputation;XX
+- Unable to Print/Bandaged;UP

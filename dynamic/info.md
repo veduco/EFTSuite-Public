@@ -1,7 +1,3 @@
-Welcome to OpenEFT 2!
-
-This is a complete rewrite that embodies the functionality of OpenEFT in a much simpler tech stack. It allows you to read and write EFT files to ATF specifications, as well as capture new prints using a physical fingerprint scanner.
-
 ---
 
 # New EFT
@@ -12,8 +8,6 @@ This section will allow you to create a new EFT! Currently, it will only permit 
 # Capture Prints
 This function will allow OpenEFT 2 to interface with a physical fingerprint scanner and capture prints directly into the OEFT2 software. You *must* use the included helper application (which only supports Windows 10 and Windows 11 at this time) to bridge the scanner with OEFT2. This is due to a limitation with Chromium's native WebUSB API. You must also have the proper drivers for your scanner installed, which should be included for the supported devices below.
 
-Capture Prints will also allow you to generate a new FD258 using the captured images for other purposes. <- FD258 creation is NOT available in any other mode.
-
 ---
 
 ## Supported Devices
@@ -21,7 +15,7 @@ The following devices are known to work with OpenEFT 2:
 * Integrated Biometrics Kojak
 * Possibly other IB ten-print scanners that use the same SDK
 
-> *Please note*: We will not be adding support for Identification International devices (like the i3) at this time, as the manufacturer is not interested in providing the SDK or documentation for integration. If you have access to the SDK and would like us to help with integration, please reach out.
+> *Please note*: We will not be adding support for Identification International devices (like the i3), as the company was not willing to provide the SDK for integration. If you have access to the SDK and would like us to help with integration, please reach out.
 
 ---
 
@@ -34,12 +28,6 @@ This mode is an "Advanced" mode that allows the user to edit the raw values of a
 ---
 
 # Changelog
-
-### v2.0.2
-
-1. Added FD258 generation for live capture
-2. Changed the color of fingerprint segmentation boxes to make them easier to see
-3. Fixed the fingerprint segmentation box drag handles
 
 ### v2.0.1
 
