@@ -1,10 +1,10 @@
-![OpenEFT Logo](WebApp/static/oeftlogo-blk.png "OpenEFT Logo")
+![EFTSuite Logo](WebApp/static/EFTSuite-blk.png "EFTSuite Logo")
 
-# Welcome to OpenEFT 2!
+# Welcome to EFT Suite!
 
-OpenEFT 2 is a lightweight web application for converting physical fingerprint cards into digital EFT files for use with ATF's eForms application.
+EFT Suite is a lightweight web application for converting physical fingerprint cards into digital EFT files for use with ATF's eForms application.
 
-This new version of OpenEFT ("OpenEFT 2") is a completely new app from the original OpenEFT (which we'll call *OpenEFT Classic* moving forward) and uses the NIST Biometric Image Software (NBIS) to handle the conversion.
+This new version of EFT Suite is inspired by the original OpenEFT (which I've been maintaining since early 2024) and uses the NIST Biometric Image Software (NBIS) to handle the conversion. It is a completely new rewrite that is independent of OpenEFT but serves the same purpose: to build EFTs for you with zero upfront cost.
 
 ## Features
 
@@ -21,7 +21,7 @@ This new version of OpenEFT ("OpenEFT 2") is a completely new app from the origi
 ## Prerequisites
 
 - **Docker**: The application is containerized. Ensure Docker is installed on your machine.
-- **Docker Hub**: You can pull this directly from [Docker Hub](https://hub.docker.com/repository/docker/robbstumpf/openeft2)
+- **Docker Hub**: You can pull this directly from [Docker Hub](https://hub.docker.com/repository/docker/robbstumpf/eftsuite)
 
 ## Build & Run
 
@@ -29,22 +29,22 @@ This new version of OpenEFT ("OpenEFT 2") is a completely new app from the origi
 **Important:** You must run this command from the **root directory** of the repository.
 
 ```bash
-docker build -t openeft2 .
+docker build -t eftsuite .
 ```
 
 *Or* you can **pull the Image directly from Docker Hub** (Recommended):
 
 ```bash
-docker pull robbstumpf/openeft2:latest
+docker pull robbstumpf/eftsuite:latest
 ```
 
 **Important**: If you are on macOS / Apple Silicon, you'll need to specify the platform or you will get an error:
 
 ```bash
-docker pull --platform linux/x86_64 robbstumpf/openeft2
+docker pull --platform linux/x86_64 robbstumpf/eftsuite
 ```
 
-![Pull OpenEFT 2 via Docker Hub](WebApp/static/img/docker1.jpg "Pull OpenEFT 2 via Docker Hub")
+![Pull EFTSuite 2 via Docker Hub](WebApp/static/img/docker1.jpg "Pull EFTSuite via Docker Hub")
 
 *Note: The build process compiles NBIS tools from source and may take a few minutes.*
 
@@ -53,13 +53,13 @@ docker pull --platform linux/x86_64 robbstumpf/openeft2
 If compiled manually...
 
 ```bash
-docker run -p 8080:8080 openeft2
+docker run -p 8080:8080 eftsuite
 ```
 
 If pulled from Docker Hub...
 
 ```bash
-docker run -p 8080:8080 robbstumpf/openeft2
+docker run -p 8080:8080 robbstumpf/eftsuite
 ```
 ![Run Docker container](WebApp/static/img/docker2.jpg "Run Docker container")
 
