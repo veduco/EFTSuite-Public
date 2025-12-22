@@ -1,4 +1,4 @@
-![EFTSuite Logo](WebApp/static/EFTSuite-blk.png "EFTSuite Logo")
+![EFTSuite Logo](WebApp/static/eftsuitelogo-blk.png "EFTSuite Logo")
 
 # Welcome to EFT Suite!
 
