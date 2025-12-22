@@ -1,6 +1,6 @@
 # Introduction
 
-The feature shops have been asking for - support to integrate OpenEFT (2) with a live ten-print scanner is finally here! This allows you to scan your customers' prints with ease.
+The feature shops have been asking for - support to integrate EFTSuite with a live ten-print scanner is finally here! This allows you to scan your customers' prints with ease.
 
 
 ### Initial Considerations
