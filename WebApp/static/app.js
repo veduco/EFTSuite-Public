@@ -132,11 +132,11 @@ function updateAppMode() {
     } else if (currentAppMode === 'info') {
         navInfo.classList.add('active');
         sectionDynamic.classList.remove('hidden');
-        loadDynamicContent('https://raw.githubusercontent.com/Robbbbbbbbb/OpenEFT-2/main/dynamic/info.md', 'Info');
+        loadDynamicContent('https://raw.githubusercontent.com/Robbbbbbbbb/EFTSuite-Public/main/dynamic/info.md', 'Info');
     } else if (currentAppMode === 'about') {
         navAbout.classList.add('active');
         sectionDynamic.classList.remove('hidden');
-        loadDynamicContent('https://raw.githubusercontent.com/Robbbbbbbbb/OpenEFT-2/main/dynamic/about.md', 'About');
+        loadDynamicContent('https://raw.githubusercontent.com/Robbbbbbbbb/EFTSuite-Public/main/dynamic/about.md', 'About');
     }
 }
 
@@ -166,7 +166,7 @@ async function loadDynamicContent(url, title) {
         dynamicBody.innerHTML = `
             <div style="text-align:center; padding: 20px;">
                 <p>Content unavailable.</p>
-                <p><a href="https://github.com/Robbbbbbbbb/OpenEFT-2/" target="_blank" style="color:var(--accent-color)">Visit Repository</a></p>
+                <p><a href="https://github.com/Robbbbbbbbb/EFTSuite-Public/" target="_blank" style="color:var(--accent-color)">Visit Repository</a></p>
             </div>
         `;
     } finally {
@@ -267,7 +267,7 @@ async function loadSupportInfo() {
     const el = document.getElementById('support-content');
     el.innerHTML = '<div style="text-align:center; color:#aaa;">Loading info...</div>';
 
-    const url = "https://raw.githubusercontent.com/Robbbbbbbbb/OpenEFT-2/refs/heads/main/dynamic/supportme.md";
+    const url = "https://raw.githubusercontent.com/Robbbbbbbbb/EFTSuite-Public/refs/heads/main/dynamic/supportme.md";
 
     try {
         const res = await fetch(url + "?t=" + new Date().getTime());
@@ -288,9 +288,9 @@ async function loadSupportInfo() {
     } catch (e) {
         el.innerHTML = `
             <div style="text-align:center;">
-                <h3>OpenEFT-2</h3>
+                <h3>EFTSuite-Public</h3>
                 <p>Check out the project on GitHub:</p>
-                <p><a href="https://github.com/Robbbbbbbbb/OpenEFT-2/" target="_blank" style="color:var(--accent-color); text-decoration:none;">https://github.com/Robbbbbbbbb/OpenEFT-2/</a></p>
+                <p><a href="https://github.com/Robbbbbbbbb/EFTSuite-Public/" target="_blank" style="color:var(--accent-color); text-decoration:none;">https://github.com/Robbbbbbbbb/EFTSuite-Public/</a></p>
             </div>
         `;
     }
@@ -1825,7 +1825,7 @@ async function checkLatestVersion() {
     if (!el) return;
 
     try {
-        const url = 'https://raw.githubusercontent.com/Robbbbbbbbb/OpenEFT-2/refs/heads/main/dynamic/version.md';
+        const url = 'https://raw.githubusercontent.com/Robbbbbbbbb/EFTSuite-Public/refs/heads/main/dynamic/version.md';
         const res = await fetch(url + "?t=" + new Date().getTime(), { cache: "no-store" });
         if (res.ok) {
             const ver = (await res.text()).trim();
