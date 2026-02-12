@@ -29,6 +29,12 @@ This mode is an "Advanced" mode that allows the user to edit the raw values of a
 
 # Changelog
 
+### 2.0.3
+
+1. Added new settings menu
+2. Restored (optional) Legacy Type-14 creation. This is disabled by default
+3. Added revised codes.js sourcing. By default, it pulls from GitHub but stores an offline version and a custom URL in case any are missed
+
 ### v2.0.2
 
 1. Type-14 print conversion is depreciated. Disabled the ability to create these.
