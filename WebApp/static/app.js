@@ -49,6 +49,7 @@ const sectionNewEft = document.getElementById('section-new-eft');
 const sectionCapture = document.getElementById('section-capture-prints');
 const sectionEditEft = document.getElementById('section-edit-eft');
 const sectionDynamic = document.getElementById('section-dynamic-content');
+const sectionSettings = document.getElementById('section-settings'); // NEW
 const editViewUpload = document.getElementById('edit-view-upload');
 const editViewMode = document.getElementById('edit-view-mode');
 const editViewMain = document.getElementById('edit-view-main');
@@ -62,6 +63,7 @@ const navNew = document.querySelector('.nav-links li:first-child');
 const navCapture = document.getElementById('nav-capture');
 const navEdit = document.getElementById('nav-edit');
 const navInfo = document.getElementById('nav-info');
+const navSettings = document.getElementById('nav-settings');
 const navAbout = document.getElementById('nav-about');
 
 const dynamicTitle = document.getElementById('dynamic-title');
@@ -74,7 +76,7 @@ const verifyCanvas = document.getElementById('editor-canvas');
 const verifyCtx = verifyCanvas.getContext('2d');
 
 // Navigation Wizard
-let currentAppMode = 'new'; // 'new' or 'edit'
+let currentAppMode = 'new'; // 'new', 'edit', 'capture', 'settings', 'info', 'about'
 let currentStep = 1; // 1, 2, 3
 let currentSubStep = 'upload'; // 'upload', 'crop', 'mode', 'box'
 
@@ -85,12 +87,19 @@ navEdit.onclick = () => {
 };
 
 navCapture.onclick = () => {
+    // If hidden, prevent click? Or maybe user shouldn't see it anyway.
+    if (navCapture.style.display === 'none') return;
     currentAppMode = 'capture';
     updateAppMode();
 };
 
 navInfo.onclick = () => {
     currentAppMode = 'info';
+    updateAppMode();
+};
+
+navSettings.onclick = () => {
+    currentAppMode = 'settings';
     updateAppMode();
 };
 
@@ -104,6 +113,7 @@ function updateAppMode() {
     navEdit.classList.remove('active');
     navCapture.classList.remove('active');
     navInfo.classList.remove('active');
+    navSettings.classList.remove('active');
     navAbout.classList.remove('active');
 
     // Reset Views
@@ -111,6 +121,7 @@ function updateAppMode() {
     sectionCapture.classList.add('hidden');
     sectionEditEft.classList.add('hidden');
     sectionDynamic.classList.add('hidden');
+    sectionSettings.classList.add('hidden');
     wizardProgressBar.classList.add('hidden');
     document.getElementById('main-footer').classList.add('hidden');
 
@@ -140,6 +151,10 @@ function updateAppMode() {
         navAbout.classList.add('active');
         sectionDynamic.classList.remove('hidden');
         loadDynamicContent('https://raw.githubusercontent.com/Robbbbbbbbb/EFTSuite-Public/main/dynamic/about.md', 'About');
+    } else if (currentAppMode === 'settings') {
+        navSettings.classList.add('active');
+        sectionSettings.classList.remove('hidden');
+        initSettingsPage();
     }
 }
 
@@ -314,6 +329,7 @@ btnNext.onclick = async () => {
             await confirmCrop();
         } else if (currentSubStep === 'box') {
             currentStep = 2;
+            if (typeof applyDemographicDefaults === 'function') applyDemographicDefaults();
             updateWizardUI();
         }
     } else if (currentStep === 2) {
@@ -1238,8 +1254,11 @@ function startCaptureSession(mode) {
     captureStepIndex = 0;
 
     if (mode === 'slaps') {
-        // REMOVED SLAPS LOGIC
-        captureSequence = [];
+        captureSequence = [
+            { id: '14', label: 'Left 4 Fingers' },
+            { id: '13', label: 'Right 4 Fingers' },
+            { id: '15', label: 'Thumbs' }
+        ];
     } else {
         // Full Type-4 Sequence
         captureSequence = [
@@ -1517,6 +1536,7 @@ async function finalizeCapture() {
 
         currentAppMode = 'new';
         currentStep = 2;
+        if (typeof applyDemographicDefaults === 'function') applyDemographicDefaults();
 
         navCapture.classList.remove('active');
         sectionCapture.classList.add('hidden');
@@ -1886,11 +1906,50 @@ async function saveEFTChanges() {
 }
 
 
-// Init Dropdowns
-async function initDropdowns() {
+// Codes Source Config
+const GITHUB_CODES_URL = "https://raw.githubusercontent.com/Robbbbbbbbb/EFTSuite-Public/refs/heads/main/dynamic/codes.js";
+const LOCAL_CODES_URL = "/static/codes.js";
+
+async function loadCodesJS() {
+    let source = localStorage.getItem('setting_codes_source') || 'github';
+    let url = GITHUB_CODES_URL;
+    let actualSource = "ONLINE"; // ONLINE, CUSTOM, FALLBACK
+
+    if (source === 'custom') {
+        url = localStorage.getItem('setting_custom_codes_url') || "";
+        actualSource = "CUSTOM";
+        if (!url) {
+            console.warn("Custom URL empty, falling back to GitHub");
+            url = GITHUB_CODES_URL;
+            actualSource = "ONLINE";
+        }
+    } else if (source === 'local') {
+        url = LOCAL_CODES_URL;
+        actualSource = "FALLBACK";
+    }
+
+    // Try primary URL
+    let text = await fetchCodes(url);
+
+    // Fallback logic
+    if (!text && source !== 'local') {
+        console.warn(`Failed to load codes from ${url}, falling back to local file.`);
+        if (typeof logToConsole !== 'undefined') logToConsole("Warning: Could not load remote codes.js. Using local fallback.");
+        text = await fetchCodes(LOCAL_CODES_URL);
+        actualSource = "FALLBACK";
+    } else if (!text && source === 'local') {
+        actualSource = "ERROR";
+    }
+
+    updateCodesIndicator(actualSource);
+
+    if (!text) {
+        console.error("Critical: Could not load codes.js from any source.");
+        return;
+    }
+
+    // Process content (Regex + Eval)
     try {
-        const response = await fetch('/static/codes.js');
-        const text = await response.text();
         const parseList = (str) => {
             str = str.trim().replace(/,$/, "");
             if (!str) return [];
@@ -1902,35 +1961,95 @@ async function initDropdowns() {
         match = text.match(/const COUNTRIES = \[\s*([\s\S]*?)\];/);
         const countries = match ? parseList(match[1]) : [];
 
-        const allPob = [...usStates, ...countries];
-        const allCtz = [...usStates, ...countries];
+        populateDropdowns(usStates, countries);
 
-        const pobSelect = document.getElementById('pob-select');
-        const ctzSelect = document.getElementById('ctz-select');
-        const addrStateSelect = document.getElementById('addr-state');
+    } catch (e) {
+        console.error("Error parsing codes.js:", e);
+        updateCodesIndicator("ERROR");
+    }
+}
 
-        const addOpts = (sel, list) => {
-            list.forEach(obj => {
-                const key = Object.keys(obj)[0];
-                const val = obj[key];
-                sel.add(new Option(`${val} (${key})`, key));
-            });
-        };
+function updateCodesIndicator(status) {
+    const el = document.getElementById('codes-source-indicator');
+    if (!el) return;
 
-        addOpts(pobSelect, allPob);
-        addOpts(ctzSelect, allCtz);
-        ctzSelect.value = "US";
-        addOpts(addrStateSelect, usStates);
+    if (status === 'ONLINE') {
+        el.textContent = 'ONLINE (GitHub)';
+        el.style.color = '#27ae60'; // Green
+    } else if (status === 'CUSTOM') {
+        el.textContent = 'CUSTOM URL';
+        el.style.color = '#e67e22'; // Orange
+    } else if (status === 'FALLBACK') {
+        el.textContent = 'FALLBACK (Local)';
+        el.style.color = '#e74c3c'; // Red
+    } else {
+        el.textContent = 'ERROR';
+        el.style.color = 'red';
+    }
+}
 
-        const hSelect = document.getElementById('height-select');
-        for (let h = 400; h <= 711; h++) {
-            let s = h.toString();
-            let ft = s[0];
-            let inch = parseInt(s.substring(1));
-            if (inch <= 11) hSelect.add(new Option(`${ft}' ${inch}"`, h));
-        }
+// Reload Handler
+const btnReload = document.getElementById('btn-reload-codes');
+if (btnReload) {
+    btnReload.onclick = async () => {
+        const originalText = btnReload.textContent;
+        btnReload.textContent = "Loading...";
+        btnReload.disabled = true;
+        await loadCodesJS();
+        btnReload.textContent = originalText;
+        btnReload.disabled = false;
+    };
+}
 
-    } catch (e) { console.error(e); }
+async function fetchCodes(url) {
+    try {
+        // Add timestamp to prevent caching for remote
+        const dummy = url.indexOf('?') === -1 ? `?t=${Date.now()}` : `&t=${Date.now()}`;
+        const fetchUrl = url.startsWith('http') ? url + dummy : url;
+
+        const res = await fetch(fetchUrl, { cache: "no-store" });
+        if (res.ok) return await res.text();
+        return null;
+    } catch (e) {
+        console.error(`Fetch error for ${url}:`, e);
+        return null;
+    }
+}
+
+function populateDropdowns(usStates, countries) {
+    const allPob = [...usStates, ...countries];
+    const allCtz = [...usStates, ...countries];
+
+    const pobSelect = document.getElementById('pob-select');
+    const ctzSelect = document.getElementById('ctz-select');
+    const addrStateSelect = document.getElementById('addr-state');
+
+    // Clear existing options first (in case of re-init)
+    pobSelect.innerHTML = '';
+    ctzSelect.innerHTML = '';
+    addrStateSelect.innerHTML = '';
+
+    const addOpts = (sel, list) => {
+        list.forEach(obj => {
+            const key = Object.keys(obj)[0];
+            const val = obj[key];
+            sel.add(new Option(`${val} (${key})`, key));
+        });
+    };
+
+    addOpts(pobSelect, allPob);
+    addOpts(ctzSelect, allCtz);
+    ctzSelect.value = "US";
+    addOpts(addrStateSelect, usStates);
+
+    const hSelect = document.getElementById('height-select');
+    hSelect.innerHTML = ''; // Clear
+    for (let h = 400; h <= 711; h++) {
+        let s = h.toString();
+        let ft = s[0];
+        let inch = parseInt(s.substring(1));
+        if (inch <= 11) hSelect.add(new Option(`${ft}' ${inch}"`, h));
+    }
 }
 
 const sentenceCase = (str) => {
@@ -1965,7 +2084,7 @@ function showLoading(show) {
 }
 
 // Start
-initDropdowns();
+loadCodesJS();
 updateWizardUI();
 checkLatestVersion();
 
@@ -1981,7 +2100,7 @@ async function checkLatestVersion() {
             // Parse Markdown and remove wrapping <p> tags if present
             const html = marked.parse(ver);
             // marked.parse wraps inline content in <p> by default, which breaks layout in the footer span.
-            // We strip the <p> tags to keep it inline.
+            // Strip the <p> tags to keep it inline.
             el.innerHTML = html.replace(/^<p>|<\/p>\s*$/g, "");
 
             // Open links in new tab
@@ -2098,4 +2217,194 @@ function mirrorBase64(b64) {
         };
         img.src = "data:image/png;base64," + b64;
     });
+}
+
+// SETTINGS LOGIC
+
+// Variables
+let showCapturePrints = localStorage.getItem('setting_show_capture') !== 'false'; // Default true
+let enableType14 = localStorage.getItem('setting_enable_type14') === 'true'; // Default false
+let defaultBypassSSN = localStorage.getItem('setting_default_bypass_ssn') !== 'false'; // Default true
+
+// Elements
+const chkShowCapture = document.getElementById('setting-show-capture');
+const inputConfigIp = document.getElementById('setting-config-ip');
+const inputConfigPort = document.getElementById('setting-config-port');
+const btnSaveConfig = document.getElementById('btn-save-config');
+const chkEnableType14 = document.getElementById('setting-enable-type14');
+const chkDefaultBypassSSN = document.getElementById('setting-default-bypass-ssn');
+const btnGenAtf = document.getElementById('btn-gen-atf');
+
+function initSettingsPage() {
+    // Load current values
+    if (chkShowCapture) chkShowCapture.checked = showCapturePrints;
+    if (inputConfigIp) inputConfigIp.value = scannerIP;
+    if (inputConfigPort) inputConfigPort.value = scannerPort;
+    if (chkEnableType14) chkEnableType14.checked = enableType14;
+    if (chkDefaultBypassSSN) chkDefaultBypassSSN.checked = defaultBypassSSN;
+}
+
+const btnCapModeSlaps = document.getElementById('btn-cap-mode-slaps');
+
+function applySettings() {
+    // Display Options
+    if (navCapture) {
+        if (showCapturePrints) {
+            navCapture.style.display = 'block';
+        } else {
+            navCapture.style.display = 'none';
+        }
+    }
+
+    // Type-14 Logic (New EFT)
+    if (btnGenAtf) {
+        const small = btnGenAtf.querySelector('div'); // The red text
+        if (enableType14) {
+            btnGenAtf.style.opacity = '1.0';
+            btnGenAtf.style.cursor = 'pointer';
+            if (small) small.style.display = 'none';
+        } else {
+            btnGenAtf.style.opacity = '0.5';
+            btnGenAtf.style.cursor = 'not-allowed';
+            if (small) small.style.display = 'block';
+        }
+    }
+
+    // Type-14 Logic (Capture Prints)
+    if (btnCapModeSlaps) {
+        if (enableType14) {
+            btnCapModeSlaps.style.display = 'block';
+        } else {
+            btnCapModeSlaps.style.display = 'none';
+        }
+    }
+}
+
+// Event Listeners
+if (chkShowCapture) {
+    chkShowCapture.onchange = (e) => {
+        showCapturePrints = e.target.checked;
+        localStorage.setItem('setting_show_capture', showCapturePrints);
+        applySettings();
+    };
+}
+
+if (chkEnableType14) {
+    chkEnableType14.onchange = (e) => {
+        enableType14 = e.target.checked;
+        localStorage.setItem('setting_enable_type14', enableType14);
+        applySettings();
+    };
+}
+
+if (chkDefaultBypassSSN) {
+    chkDefaultBypassSSN.onchange = (e) => {
+        defaultBypassSSN = e.target.checked;
+        localStorage.setItem('setting_default_bypass_ssn', defaultBypassSSN);
+    };
+}
+
+// Codes Configuration Logic
+const radioCodesOptions = document.getElementsByName('codes-source');
+const inputCustomCodesUrl = document.getElementById('setting-custom-codes-url');
+const customCodesContainer = document.getElementById('custom-codes-url-container');
+
+// Init values
+const currentCodesSource = localStorage.getItem('setting_codes_source') || 'github';
+radioCodesOptions.forEach(r => {
+    if (r.value === currentCodesSource) r.checked = true;
+
+    r.onchange = (e) => {
+        const val = e.target.value;
+        localStorage.setItem('setting_codes_source', val);
+        applyCodesSettings(val);
+        // Reload codes immediately
+        loadCodesJS();
+        alert("Codes source updated. Data reloaded.");
+    };
+});
+
+if (inputCustomCodesUrl) {
+    inputCustomCodesUrl.value = localStorage.getItem('setting_custom_codes_url') || "";
+    inputCustomCodesUrl.onchange = (e) => {
+        localStorage.setItem('setting_custom_codes_url', e.target.value.trim());
+        // Reload if Custom is selected
+        if (localStorage.getItem('setting_codes_source') === 'custom') {
+            loadCodesJS();
+            alert("Custom URL updated. Data reloaded.");
+        }
+    };
+}
+
+function applyCodesSettings(val) {
+    if (val === 'custom') {
+        customCodesContainer.style.display = 'block';
+    } else {
+        customCodesContainer.style.display = 'none';
+    }
+}
+applyCodesSettings(currentCodesSource);
+
+if (btnSaveConfig) {
+    btnSaveConfig.onclick = () => {
+        const ip = inputConfigIp.value.trim();
+        const port = inputConfigPort.value.trim();
+
+        if (ip && port) {
+            scannerIP = ip;
+            scannerPort = port;
+            localStorage.setItem('scanner_ip', scannerIP);
+            localStorage.setItem('scanner_port', scannerPort);
+
+            // Update the modal inputs too, if they exist
+            const modalIp = document.getElementById('setting-scanner-ip');
+            const modalPort = document.getElementById('setting-scanner-port');
+            if (modalIp) modalIp.value = scannerIP;
+            if (modalPort) modalPort.value = scannerPort;
+
+            // Show success feedback
+            const originalText = btnSaveConfig.textContent;
+            btnSaveConfig.textContent = "Saved!";
+            btnSaveConfig.style.background = '#27ae60';
+            setTimeout(() => {
+                btnSaveConfig.textContent = originalText;
+                btnSaveConfig.style.background = ''; // Revert to CSS default
+            }, 1500);
+
+        } else {
+            alert("Please enter valid IP and Port");
+        }
+    };
+}
+
+// Overwrite Type-14 click handler
+if (btnGenAtf) {
+    btnGenAtf.onclick = () => {
+        if (!enableType14) return;
+
+        selectedGenMode = 'atf';
+        boxes = getBoxesForMode('atf');
+        currentSubStep = 'box';
+        updateWizardUI();
+        requestAnimationFrame(initVerifyStep);
+    };
+}
+
+if (btnCapModeSlaps) {
+    btnCapModeSlaps.onclick = () => startCaptureSession('slaps');
+}
+
+// Initialize on Load
+applySettings();
+initSettingsPage();
+
+function applyDemographicDefaults() {
+    if (defaultBypassSSN) {
+        const chk = document.getElementById('bypass-ssn');
+        if (chk && !chk.checked) {
+            chk.checked = true;
+            // Trigger change event to update UI state (disable input)
+            chk.dispatchEvent(new Event('change'));
+        }
+    }
 }

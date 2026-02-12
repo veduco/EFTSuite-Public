@@ -74,11 +74,18 @@ class Finger:
     def computeBox(self):
         """
         Calculates the bounding box coordinates based on dimensions and rotation.
+        For Type-14 14.021, we need the bounding box of the segment in the original image.
+        nfseg provides Top-Left (sx, sy) and Width/Height (sw, sh).
+        Field 14.021 requires: Left, Right, Top, Bottom.
         """
-        self.x1 = str(abs(int((self.sw / 2) * math.cos(self.t) - (self.sh / 2)))) 
-        self.y1 = str(abs(int((self.sh / 2) * math.cos(self.t) - (self.sw / 2)))) 
-        self.x2 = str(abs(int((self.sw / 2) * math.cos(self.t) + (self.sh / 2)))) 
-        self.y2 = str(abs(int((self.sh / 2) * math.cos(self.t) - (self.sw / 2)))) 
+        # Ensure values are integers
+        sx, sy = int(self.sx), int(self.sy)
+        sw, sh = int(self.sw), int(self.sh)
+        
+        self.x1 = str(sx)               # Left
+        self.x2 = str(sx + sw)          # Right
+        self.y1 = str(sy)               # Top
+        self.y2 = str(sy + sh)          # Bottom 
 
     def segmentQuality(self):
         """
@@ -284,13 +291,67 @@ class Fingerprint:
         """
         Segments the slap image into individual fingers using `nfseg`.
         Populates the `self.fingers` list with `Finger` objects.
+        Filters ensuring only valid fingers for the slap type are kept.
         """
         png_path = os.path.join(self.tmpdir, self.name + ".png")
         try:
             segments = segment_fingerprints(png_path, self.fp_number)
+            temp_fingers = []
+            
             for segment in segments:
                 # The Finger class expects a string, so we need to reconstruct it
                 line = f"FILE {segment['file']} e 3 sw {segment['sw']} sh {segment['sh']} sx {segment['sx']} sy {segment['sy']} th {segment['th']}"
-                self.fingers.append(Finger(line, self.tmpdir))
+                f = Finger(line, self.tmpdir)
+                temp_fingers.append(f)
+                
+            # Filter based on slap type
+            fp_num = int(self.fp_number)
+            valid_fingers = []
+            
+            if fp_num == 13: # Right Slap (2,3,4,5)
+                valid_fingers = [2, 3, 4, 5]
+            elif fp_num == 14: # Left Slap (7,8,9,10)
+                valid_fingers = [7, 8, 9, 10]
+            elif fp_num == 15: # Thumbs (1, 6, 11, 12)
+                valid_fingers = [1, 6, 11, 12]
+                
+            filtered = []
+            for f in temp_fingers:
+                try:
+                    n = int(f.n)
+                    if n in valid_fingers:
+                        filtered.append(f)
+                except:
+                    pass
+            
+            # Additional safety: Sort by X position (Left to Right) if finger numbers are missing/0?
+            # But assume n is correct for now.
+            
+            # Sort by finger number
+            filtered.sort(key=lambda x: int(x.n))
+            
+            # Cap count?
+            # If we have duplicate segments for same finger, take largest area?
+            # Or just take first provided by nfseg.
+            # "Found 8 max: 4" -> likely duplication.
+            
+            # De-duplicate by finger number
+            unique_map = {}
+            for f in filtered:
+                n = int(f.n)
+                # If duplicate, keep larger area?
+                if n in unique_map:
+                    f_area = int(f.sw) * int(f.sh)
+                    curr_area = int(unique_map[n].sw) * int(unique_map[n].sh)
+                    if f_area > curr_area:
+                        unique_map[n] = f
+                else:
+                    unique_map[n] = f
+            
+            self.fingers = list(unique_map.values())
+            self.fingers.sort(key=lambda x: int(x.n))
+            
+            print(f"Segmented FP {fp_num}: Found {len(self.fingers)} fingers ({[f.n for f in self.fingers]})")
+            
         except Exception as e:
             print(f"Segmentation failed: {e}")
