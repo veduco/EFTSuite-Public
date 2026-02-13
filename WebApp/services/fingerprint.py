@@ -3,7 +3,7 @@ import cv2
 import math
 import numpy as np
 from services.eft_helper import US_CHAR
-from services.nbis_helper import segment_fingerprints, get_nfiq_quality
+from services.nbis_helper import segment_fingerprints, get_nfiq_quality, convert_to_wsq
 
 class Finger:
     """
@@ -74,11 +74,18 @@ class Finger:
     def computeBox(self):
         """
         Calculates the bounding box coordinates based on dimensions and rotation.
+        For Type-14 14.021, we need the bounding box of the segment in the original image.
+        nfseg provides Top-Left (sx, sy) and Width/Height (sw, sh).
+        Field 14.021 requires: Left, Right, Top, Bottom.
         """
-        self.x1 = str(abs(int((self.sw / 2) * math.cos(self.t) - (self.sh / 2)))) 
-        self.y1 = str(abs(int((self.sh / 2) * math.cos(self.t) - (self.sw / 2)))) 
-        self.x2 = str(abs(int((self.sw / 2) * math.cos(self.t) + (self.sh / 2)))) 
-        self.y2 = str(abs(int((self.sh / 2) * math.cos(self.t) - (self.sw / 2)))) 
+        # Ensure values are integers
+        sx, sy = int(self.sx), int(self.sy)
+        sw, sh = int(self.sw), int(self.sh)
+        
+        self.x1 = str(sx)               # Left
+        self.x2 = str(sx + sw)          # Right
+        self.y1 = str(sy)               # Top
+        self.y2 = str(sy + sh)          # Bottom 
 
     def segmentQuality(self):
         """
@@ -129,6 +136,10 @@ class Fingerprint:
         self.encoding = 'png'
         self.converted = ""
         
+        # Validate Image
+        if src_img is None or src_img.size == 0:
+             raise ValueError(f"Invalid image for FP {fp_number}")
+
         # Force 8-bit Grayscale
         if len(src_img.shape) == 3 and src_img.shape[2] == 3:
             print(f"Converting FP {fp_number} from RGB {src_img.shape} to Grayscale")
@@ -148,34 +159,110 @@ class Fingerprint:
         # Fixed constants as per FBI EFT Specification
         self.hps = "2400"                 # Horizontal Pixel Scale
         self.vps = "2400"                 # Vertical Pixel Scale
-        self.cga = "JP2"                  # Compression Algorithm
+        self.cga = "NONE"                 # Compression Algorithm (Default None)
         self.bpx = "8"                    # Bits Per Pixel
+
+    def _prepare_type4_dimensions(self):
+        """
+        Resizes the image to meet Type-4 strict dimension requirements.
+        """
+        target_w, target_h = 0, 0
+        fp_num = int(self.fp_number)
+        
+        if 1 <= fp_num <= 10:
+            target_w, target_h = 800, 750
+        elif 11 <= fp_num <= 12:
+            target_w, target_h = 400, 572
+        elif 13 <= fp_num <= 14:
+            target_w, target_h = 1600, 1000
+        else:
+            return # No resize needed
+            
+        print(f"Resizing FP {fp_num} to {target_w}x{target_h} for Type-4")
+        resized_img = cv2.resize(self.img, (target_w, target_h), interpolation=cv2.INTER_AREA)
+        
+        self.img = resized_img
+        self.hll = str(target_w)
+        self.vll = str(target_h)
+
+    def process_and_convert_raw(self, type4=False):
+        """
+        Saves the image as raw bytes (uncompressed).
+        """
+        if type4:
+            self._prepare_type4_dimensions()
+
+        raw_path = os.path.join(self.tmpdir, self.name + ".raw")
+        with open(raw_path, "wb") as f:
+            f.write(self.img.tobytes())
+            
+        self.converted = raw_path
+        self.cga = "NONE"
+        print(f"FP {self.fp_number} Saved Raw: {raw_path}")
+        
+        # Segment slaps if Type-14 (Type-4 usually doesn't segment slaps in this context)
+        if not type4 and int(self.fp_number) >= 13:
+            # For segmentation we need a PNG usually because nfseg works on image files
+            # But we can save a temp png
+            png_path = os.path.join(self.tmpdir, self.name + ".png")
+            cv2.imwrite(png_path, self.img)
+            self.segment()
+            
+        return self.converted
+
+    def process_and_convert_wsq(self, bitrate=2.25, type4=False):
+        """
+        Compresses the image using WSQ.
+        """
+        if type4:
+            self._prepare_type4_dimensions()
+
+        # Save Raw first (needed for cwsq)
+        raw_path = os.path.join(self.tmpdir, self.name + ".raw")
+        with open(raw_path, "wb") as f:
+            f.write(self.img.tobytes())
+            
+        wsq_path = os.path.join(self.tmpdir, self.name + ".wsq")
+        
+        try:
+            convert_to_wsq(
+                raw_path, 
+                wsq_path, 
+                int(self.hll), 
+                int(self.vll), 
+                bitrate=bitrate
+            )
+            self.converted = wsq_path
+            self.cga = "WSQ20" # For Type-14. Type-4 will map this to 1.
+            print(f"FP {self.fp_number} Converted to WSQ: {wsq_path} (Rate: {bitrate})")
+        except Exception as e:
+            print(f"WSQ Conversion failed: {e}")
+            return None
+
+        if not type4 and int(self.fp_number) >= 13:
+            # Segment needs PNG
+            png_path = os.path.join(self.tmpdir, self.name + ".png")
+            if not os.path.exists(png_path):
+                cv2.imwrite(png_path, self.img)
+            self.segment()
+
+        return self.converted
 
     def process_and_convert(self, compression_ratio=10):
         """
-        Processes the image: saves as PNG, converts to JP2 using `opj_compress`,
-        and triggers segmentation if applicable.
-
-        Args:
-            compression_ratio (int): The compression ratio for JPEG 2000 (passed to -r flag).
-
-        Returns:
-            str: Path to the generated JP2 file, or None on failure.
+        Legacy method for JP2 conversion (kept for backward compatibility if needed, 
+        but we are moving to WSQ/Raw).
         """
         png_path = os.path.join(self.tmpdir, self.name + ".png")
         if not os.path.exists(png_path):
             cv2.imwrite(png_path, self.img)
             
-        png_size = os.path.getsize(png_path)
-        print(f"FP {self.fp_number} PNG Saved: {png_path} ({png_size} bytes)")
-        
         jp2_path = os.path.join(self.tmpdir, self.name + ".jp2")
         
         # Command: opj_compress -i input.png -o output.jp2 -r ratio -n 2
         cmd = ["opj_compress", "-i", png_path, "-o", jp2_path, "-r", str(compression_ratio), "-n", "2"]
         
         try:
-            # Capture stdout/stderr
             import subprocess
             res = subprocess.run(cmd, capture_output=True, text=True)
             if res.returncode != 0:
@@ -183,6 +270,7 @@ class Fingerprint:
                 return None
             
             self.converted = jp2_path
+            self.cga = "JP2"
         except Exception as e:
             print(f"Conversion failed: {e}")
             return None
@@ -194,76 +282,76 @@ class Fingerprint:
 
     def process_and_convert_type4(self, compression_ratio=10):
         """
-        Special processing for Type 4 records with strict dimension requirements.
-        Dimensions:
-        - 1-10: 800x750 (Rolled)
-        - 11-12: 400x572 (Plain Thumbs)
-        - 13-14: 1600x1000 (Plain 4 Fingers)
+        Legacy Type-4 JP2 conversion.
         """
-        # Determine target dimensions
-        target_w, target_h = 0, 0
-        fp_num = int(self.fp_number)
-        
-        if 1 <= fp_num <= 10:
-            target_w, target_h = 800, 750
-        elif 11 <= fp_num <= 12:
-            target_w, target_h = 400, 572
-        elif 13 <= fp_num <= 14:
-            target_w, target_h = 1600, 1000
-        else:
-            # Fallback for unknown
-            return self.process_and_convert(compression_ratio)
-            
-        # Resize logic
-        # We need to fit the crop into target_w/h without distortion?
-        # Or usually stretch? Or Pad?
-        # FBI specs usually imply 500ppi. If the crop is correct, resizing it
-        # is the best bet to enforce strict pixel dimensions.
-        print(f"Resizing FP {fp_num} to {target_w}x{target_h} for Type-4")
-        resized_img = cv2.resize(self.img, (target_w, target_h), interpolation=cv2.INTER_AREA)
-        
-        # Update internal image
-        self.img = resized_img
-        self.hll = str(target_w)
-        self.vll = str(target_h)
-        
-        # Proceed with normal conversion (save PNG -> JP2)
-        # Note: Type-4 segmentation is not required/standard in the same way as Type-14 slaps.
-        # So we skip segment() for 13-14 in Type-4 mode (as they are just treated as flat images).
-        
-        png_path = os.path.join(self.tmpdir, self.name + ".png")
-        if not os.path.exists(png_path):
-            cv2.imwrite(png_path, self.img)
-            
-        jp2_path = os.path.join(self.tmpdir, self.name + ".jp2")
-        
-        # Command: opj_compress ...
-        cmd = ["opj_compress", "-i", png_path, "-o", jp2_path, "-r", str(compression_ratio), "-n", "2"]
-        
-        try:
-            import subprocess
-            res = subprocess.run(cmd, capture_output=True, text=True)
-            if res.returncode != 0:
-                print(f"opj_compress failed for FP {self.fp_number}: {res.stderr}")
-                return None
-            self.converted = jp2_path
-        except Exception as e:
-            print(f"Conversion failed: {e}")
-            return None
-            
-        return self.converted
+        self._prepare_type4_dimensions()
+        return self.process_and_convert(compression_ratio)
 
     def segment(self):
         """
         Segments the slap image into individual fingers using `nfseg`.
         Populates the `self.fingers` list with `Finger` objects.
+        Filters ensuring only valid fingers for the slap type are kept.
         """
         png_path = os.path.join(self.tmpdir, self.name + ".png")
         try:
             segments = segment_fingerprints(png_path, self.fp_number)
+            temp_fingers = []
+            
             for segment in segments:
                 # The Finger class expects a string, so we need to reconstruct it
                 line = f"FILE {segment['file']} e 3 sw {segment['sw']} sh {segment['sh']} sx {segment['sx']} sy {segment['sy']} th {segment['th']}"
-                self.fingers.append(Finger(line, self.tmpdir))
+                f = Finger(line, self.tmpdir)
+                temp_fingers.append(f)
+                
+            # Filter based on slap type
+            fp_num = int(self.fp_number)
+            valid_fingers = []
+            
+            if fp_num == 13: # Right Slap (2,3,4,5)
+                valid_fingers = [2, 3, 4, 5]
+            elif fp_num == 14: # Left Slap (7,8,9,10)
+                valid_fingers = [7, 8, 9, 10]
+            elif fp_num == 15: # Thumbs (1, 6, 11, 12)
+                valid_fingers = [1, 6, 11, 12]
+                
+            filtered = []
+            for f in temp_fingers:
+                try:
+                    n = int(f.n)
+                    if n in valid_fingers:
+                        filtered.append(f)
+                except:
+                    pass
+            
+            # Additional safety: Sort by X position (Left to Right) if finger numbers are missing/0?
+            # But assume n is correct for now.
+            
+            # Sort by finger number
+            filtered.sort(key=lambda x: int(x.n))
+            
+            # Cap count?
+            # If we have duplicate segments for same finger, take largest area?
+            # Or just take first provided by nfseg.
+            # "Found 8 max: 4" -> likely duplication.
+            
+            # De-duplicate by finger number
+            unique_map = {}
+            for f in filtered:
+                n = int(f.n)
+                # If duplicate, keep larger area?
+                if n in unique_map:
+                    f_area = int(f.sw) * int(f.sh)
+                    curr_area = int(unique_map[n].sw) * int(unique_map[n].sh)
+                    if f_area > curr_area:
+                        unique_map[n] = f
+                else:
+                    unique_map[n] = f
+            
+            self.fingers = list(unique_map.values())
+            self.fingers.sort(key=lambda x: int(x.n))
+            
+            print(f"Segmented FP {fp_num}: Found {len(self.fingers)} fingers ({[f.n for f in self.fingers]})")
+            
         except Exception as e:
             print(f"Segmentation failed: {e}")

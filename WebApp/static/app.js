@@ -6,6 +6,7 @@ let cropImage = new Image(); // For crop step (Step 1)
 let boxes = []; // Array of fingerprint boxes
 let activeBoxIndex = -1;
 let isCaptureSession = false; // Track if session is from capture
+let pendingImageData = null;
 
 // Crop State
 let cropRotation = 0;
@@ -19,7 +20,7 @@ let isDragging = false;
 let isResizing = false;
 let resizeHandle = null;
 let scaleFactor = 1;
-let selectedGenMode = 'atf'; // 'atf' or 'rolled'
+let selectedGenMode = 'rolled'; // 'atf' or 'rolled'
 
 // Edit/View State
 let isEditMode = false;
@@ -40,12 +41,15 @@ const viewUpload = document.getElementById('view-upload');
 const viewCrop = document.getElementById('view-crop');
 const viewModeSelect = document.getElementById('view-mode-select');
 const viewBox = document.getElementById('view-box');
+const viewPdfSelect = document.getElementById('view-pdf-select');
+const viewWarning = document.getElementById('view-warning');
 
 // New Section References
 const sectionNewEft = document.getElementById('section-new-eft');
 const sectionCapture = document.getElementById('section-capture-prints');
 const sectionEditEft = document.getElementById('section-edit-eft');
 const sectionDynamic = document.getElementById('section-dynamic-content');
+const sectionSettings = document.getElementById('section-settings'); // NEW
 const editViewUpload = document.getElementById('edit-view-upload');
 const editViewMode = document.getElementById('edit-view-mode');
 const editViewMain = document.getElementById('edit-view-main');
@@ -59,6 +63,7 @@ const navNew = document.querySelector('.nav-links li:first-child');
 const navCapture = document.getElementById('nav-capture');
 const navEdit = document.getElementById('nav-edit');
 const navInfo = document.getElementById('nav-info');
+const navSettings = document.getElementById('nav-settings');
 const navAbout = document.getElementById('nav-about');
 
 const dynamicTitle = document.getElementById('dynamic-title');
@@ -71,7 +76,7 @@ const verifyCanvas = document.getElementById('editor-canvas');
 const verifyCtx = verifyCanvas.getContext('2d');
 
 // Navigation Wizard
-let currentAppMode = 'new'; // 'new' or 'edit'
+let currentAppMode = 'new'; // 'new', 'edit', 'capture', 'settings', 'info', 'about'
 let currentStep = 1; // 1, 2, 3
 let currentSubStep = 'upload'; // 'upload', 'crop', 'mode', 'box'
 
@@ -82,12 +87,19 @@ navEdit.onclick = () => {
 };
 
 navCapture.onclick = () => {
+    // If hidden, prevent click? Or maybe user shouldn't see it anyway.
+    if (navCapture.style.display === 'none') return;
     currentAppMode = 'capture';
     updateAppMode();
 };
 
 navInfo.onclick = () => {
     currentAppMode = 'info';
+    updateAppMode();
+};
+
+navSettings.onclick = () => {
+    currentAppMode = 'settings';
     updateAppMode();
 };
 
@@ -101,6 +113,7 @@ function updateAppMode() {
     navEdit.classList.remove('active');
     navCapture.classList.remove('active');
     navInfo.classList.remove('active');
+    navSettings.classList.remove('active');
     navAbout.classList.remove('active');
 
     // Reset Views
@@ -108,6 +121,7 @@ function updateAppMode() {
     sectionCapture.classList.add('hidden');
     sectionEditEft.classList.add('hidden');
     sectionDynamic.classList.add('hidden');
+    sectionSettings.classList.add('hidden');
     wizardProgressBar.classList.add('hidden');
     document.getElementById('main-footer').classList.add('hidden');
 
@@ -137,6 +151,10 @@ function updateAppMode() {
         navAbout.classList.add('active');
         sectionDynamic.classList.remove('hidden');
         loadDynamicContent('https://raw.githubusercontent.com/Robbbbbbbbb/EFTSuite-Public/main/dynamic/about.md', 'About');
+    } else if (currentAppMode === 'settings') {
+        navSettings.classList.add('active');
+        sectionSettings.classList.remove('hidden');
+        initSettingsPage();
     }
 }
 
@@ -208,7 +226,7 @@ function updateWizardUI() {
         panelStep1.classList.remove('hidden');
 
         // Sub-step logic
-        [viewUpload, viewCrop, viewModeSelect, viewBox].forEach(v => v.classList.add('hidden'));
+        [viewUpload, viewCrop, viewModeSelect, viewBox, viewPdfSelect, viewWarning].forEach(v => v.classList.add('hidden'));
 
         if (currentSubStep === 'upload') {
             viewUpload.classList.remove('hidden');
@@ -229,6 +247,12 @@ function updateWizardUI() {
             btnBack.onclick = () => { currentSubStep = 'mode'; updateWizardUI(); };
             btnNext.classList.remove('hidden');
             btnNext.textContent = "Next Step";
+        } else if (currentSubStep === 'pdf_select') {
+            viewPdfSelect.classList.remove('hidden');
+            btnBack.classList.remove('hidden');
+            btnBack.onclick = () => { window.location.reload(); };
+        } else if (currentSubStep === 'warning') {
+            viewWarning.classList.remove('hidden');
         }
 
     } else if (currentStep === 2) {
@@ -305,6 +329,7 @@ btnNext.onclick = async () => {
             await confirmCrop();
         } else if (currentSubStep === 'box') {
             currentStep = 2;
+            if (typeof applyDemographicDefaults === 'function') applyDemographicDefaults();
             updateWizardUI();
         }
     } else if (currentStep === 2) {
@@ -321,11 +346,8 @@ btnNext.onclick = async () => {
 
 // Mode Selection Handlers
 document.getElementById('btn-gen-atf').onclick = () => {
-    selectedGenMode = 'atf';
-    boxes = getBoxesForMode('atf');
-    currentSubStep = 'box';
-    updateWizardUI();
-    requestAnimationFrame(initVerifyStep);
+    // Type-14 is disabled
+    return;
 };
 document.getElementById('btn-gen-rolled').onclick = () => {
     selectedGenMode = 'rolled';
@@ -336,35 +358,67 @@ document.getElementById('btn-gen-rolled').onclick = () => {
 };
 
 // STEP 1: Upload
+// SSN Bypass Logic
+const bypassChk = document.getElementById('bypass-ssn');
+if (bypassChk) {
+    bypassChk.onchange = (e) => {
+        const ssnInput = document.querySelector('input[name="2.016"]');
+        if (e.target.checked) {
+            ssnInput.value = '';
+            ssnInput.disabled = true;
+            ssnInput.required = false;
+        } else {
+            ssnInput.disabled = false;
+            ssnInput.required = true;
+        }
+    };
+}
+
+// STEP 1: Upload
 const fileInput = document.getElementById('file-input');
-const uploadArea = document.querySelector('.upload-area');
+const uploadArea = document.querySelector('#view-upload .upload-area');
 
-// Drag & Drop
-uploadArea.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    uploadArea.classList.add('dragover');
-});
+function setupUploadZone(area, input, handler) {
+    if (!area || !input) return;
 
-uploadArea.addEventListener('dragleave', (e) => {
-    e.preventDefault();
-    uploadArea.classList.remove('dragover');
-});
+    // Click to upload (delegation)
+    area.onclick = (e) => {
+        // Ignroe if clicking the button (it has its own handler/behavior) or the input itself
+        if (e.target.tagName === 'BUTTON' || e.target === input) return;
+        input.click();
+    };
 
-uploadArea.addEventListener('drop', (e) => {
-    e.preventDefault();
-    uploadArea.classList.remove('dragover');
-    if (e.dataTransfer.files.length > 0) {
-        handleFileUpload(e.dataTransfer.files[0]);
-    }
-});
+    // Drag & Drop
+    area.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        area.classList.add('dragover');
+    });
 
-fileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-        const f = e.target.files[0];
-        e.target.value = '';
-        handleFileUpload(f);
-    }
-});
+    area.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        area.classList.remove('dragover');
+    });
+
+    area.addEventListener('drop', (e) => {
+        e.preventDefault();
+        area.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+            handler(e.dataTransfer.files[0]);
+        }
+    });
+
+    // Input Change
+    input.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            const f = e.target.files[0];
+            e.target.value = '';
+            handler(f);
+        }
+    });
+}
+
+// Setup New EFT Upload
+setupUploadZone(uploadArea, fileInput, handleFileUpload);
 
 async function handleFileUpload(file) {
     const formData = new FormData();
@@ -378,6 +432,24 @@ async function handleFileUpload(file) {
 
         sessionId = data.session_id;
         isCaptureSession = false;
+
+        // Check for PPI Warning
+        if (data.warning) {
+            document.getElementById('warning-text').textContent = data.warning;
+            currentSubStep = 'warning';
+            updateWizardUI();
+
+            // Store data for proceeding
+            pendingImageData = data;
+            return;
+        }
+
+        if (data.type === 'pdf_selection') {
+            currentSubStep = 'pdf_select';
+            renderPdfSelection(data.pages);
+            updateWizardUI();
+            return;
+        }
 
         cropImage.onload = () => {
             currentSubStep = 'crop';
@@ -561,40 +633,69 @@ function getBoxesForMode(mode) {
     const h = image.height;
 
     if (mode === 'atf') {
+        // Legacy mode
         return [
-            { id: 'L_SLAP', fp_number: 14, x: w * 0.05, y: h * 0.45, w: w * 0.3, h: h * 0.4 },
-            { id: 'R_SLAP', fp_number: 13, x: w * 0.65, y: h * 0.45, w: w * 0.3, h: h * 0.4 },
-            { id: 'THUMBS', fp_number: 15, x: w * 0.3, y: h * 0.75, w: w * 0.4, h: h * 0.2 },
+            { id: 'Left Slap', fp_number: 14, x: w * 0.05, y: h * 0.45, w: w * 0.3, h: h * 0.4 },
+            { id: 'Right Slap', fp_number: 13, x: w * 0.65, y: h * 0.45, w: w * 0.3, h: h * 0.4 },
+            { id: 'Thumbs', fp_number: 15, x: w * 0.3, y: h * 0.75, w: w * 0.4, h: h * 0.2 },
         ];
     } else {
-        const rowH = h * 0.18;
-        const boxW = w * 0.16;
-        const y1 = h * 0.35;
-        const y2 = h * 0.55;
-        const y3 = h * 0.78;
+        // Updated Specs (FD-258 8x8)
+        // Rolls: 0.2w, 0.1875h
+        // Slaps: 0.375w, 0.25h
+        // Plain Thumbs: 0.125w, 0.25h
+
+        const w_roll = w * 0.18;      // Reduced 10%
+        const h_roll = h * 0.16875;   // Reduced 10%
+        const w_plain = w * 0.10;     // Reduced 20%
+        const h_plain = h * 0.20;     // Reduced 20%
+        const w_slap = w * 0.375;
+        const h_slap = h * 0.25;
+
+        const y1 = h * 0.33; // Row 1
+        const y2 = h * 0.53; // Row 2
+        const y3 = h * 0.74; // Row 3
 
         const list = [];
+        const fingerNames = ["Thumb", "Index", "Middle", "Ring", "Little"];
+
         // Row 1 (Right Hand Rolled) 1-5
-        for (let i = 1; i <= 5; i++) {
-            list.push({ id: `R${i}`, fp_number: i, x: (i - 1) * boxW + w * 0.1, y: y1, w: boxW * 0.9, h: rowH });
+        // x = 0.0, 0.2, 0.4, 0.6, 0.8
+        for (let i = 0; i < 5; i++) {
+            list.push({
+                id: `Right ${fingerNames[i]}`,
+                fp_number: i + 1,
+                x: i * (w * 0.2),
+                y: y1,
+                w: w_roll,
+                h: h_roll
+            });
         }
+
         // Row 2 (Left Hand Rolled) 6-10
-        for (let i = 6; i <= 10; i++) {
-            list.push({ id: `L${i - 5}`, fp_number: i, x: (i - 6) * boxW + w * 0.1, y: y2, w: boxW * 0.9, h: rowH });
+        // x = 0.0, 0.2, 0.4, 0.6, 0.8
+        for (let i = 0; i < 5; i++) {
+            list.push({
+                id: `Left ${fingerNames[i]}`,
+                fp_number: i + 6,
+                x: i * (w * 0.2),
+                y: y2,
+                w: w_roll,
+                h: h_roll
+            });
         }
 
         // Row 3 (Plain)
-        const pW = w * 0.2;
-        const tW = w * 0.1;
+        // Positions matches backend:
+        // L4: x=0.0
+        // LT: x=0.375
+        // RT: x=0.50
+        // R4: x=0.625
 
-        // 14: Plain Left 4
-        list.push({ id: 'P_L4', fp_number: 14, x: w * 0.05, y: y3, w: pW, h: rowH });
-        // 12: Plain Left Thumb
-        list.push({ id: 'P_LT', fp_number: 12, x: w * 0.28, y: y3, w: tW, h: rowH });
-        // 11: Plain Right Thumb
-        list.push({ id: 'P_RT', fp_number: 11, x: w * 0.40, y: y3, w: tW, h: rowH });
-        // 13: Plain Right 4
-        list.push({ id: 'P_R4', fp_number: 13, x: w * 0.55, y: y3, w: pW, h: rowH });
+        list.push({ id: 'Left 4 Fingers', fp_number: 14, x: 0, y: y3, w: w_slap, h: h_slap });
+        list.push({ id: 'Left Thumb Plain', fp_number: 12, x: w * 0.375, y: y3, w: w_plain, h: h_slap });
+        list.push({ id: 'Right Thumb Plain', fp_number: 11, x: w * 0.50, y: y3, w: w_plain, h: h_slap });
+        list.push({ id: 'Right 4 Fingers', fp_number: 13, x: w * 0.625, y: y3, w: w_slap, h: h_slap });
 
         return list;
     }
@@ -922,6 +1023,7 @@ btnSubmit.onclick = async () => {
         session_id: sessionId,
         boxes: boxes,
         type2_data: data,
+        bypass_ssn: document.getElementById('bypass-ssn').checked,
         mode: selectedGenMode
     };
 
@@ -982,6 +1084,7 @@ document.getElementById('btn-dl-fd258').onclick = async () => {
         session_id: sessionId,
         boxes: boxes,
         type2_data: data,
+        bypass_ssn: document.getElementById('bypass-ssn').checked,
         mode: selectedGenMode
     };
 
@@ -1023,6 +1126,10 @@ let capturedPrints = {}; // Map of ID -> Base64
 let currentCaptureImage = null;
 let reconnectTimer = null;
 
+// Settings
+let scannerIP = localStorage.getItem('scanner_ip') || 'localhost';
+let scannerPort = localStorage.getItem('scanner_port') || '8888';
+
 function initCaptureMode() {
     const statusEl = document.getElementById('scanner-status');
     const previewEl = document.getElementById('scanner-preview');
@@ -1032,13 +1139,13 @@ function initCaptureMode() {
     document.getElementById('capture-wizard').classList.add('hidden');
 
     // Setup Mode Buttons
-    document.getElementById('btn-cap-mode-slaps').onclick = () => startCaptureSession('slaps');
+    // document.getElementById('btn-cap-mode-slaps').onclick = () => startCaptureSession('slaps'); // REMOVED
     document.getElementById('btn-cap-mode-full').onclick = () => startCaptureSession('full');
 
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
-    logToConsole("Connecting to Scanner Helper...");
-    ws = new WebSocket('ws://localhost:8888/');
+    logToConsole(`Connecting to Scanner Helper at ws://${scannerIP}:${scannerPort}/ ...`);
+    ws = new WebSocket(`ws://${scannerIP}:${scannerPort}/`);
 
     ws.onopen = () => {
         logToConsole("WS Connected");
@@ -1059,7 +1166,7 @@ function initCaptureMode() {
 
     ws.onerror = (e) => logToConsole("WS Error");
 
-    ws.onmessage = (evt) => {
+    ws.onmessage = async (evt) => {
         const msg = JSON.parse(evt.data);
 
         if (msg.type === 'log') {
@@ -1070,8 +1177,24 @@ function initCaptureMode() {
             logToConsole("STATUS: " + msg.message);
         } else if (msg.type === 'result') {
             logToConsole("Image Captured");
-            currentCaptureImage = msg.image;
-            showCaptureResult(msg.image);
+
+            let finalImg = msg.image;
+            const currentItem = captureSequence[captureStepIndex];
+            // Mirror Slaps (13, 14) due to scanner reversing them
+            if (currentItem && ['13', '14'].includes(currentItem.id)) {
+                logToConsole("Correcting mirrored slap...");
+                finalImg = await mirrorBase64(msg.image);
+            }
+
+            currentCaptureImage = finalImg;
+
+            // Check Express Mode
+            const isExpress = document.getElementById('chk-express-mode').checked;
+            if (isExpress) {
+                acceptCapture();
+            } else {
+                showCaptureResult(finalImg);
+            }
         }
     };
 
@@ -1083,6 +1206,46 @@ function initCaptureMode() {
     document.getElementById('btn-cap-reset').onclick = resetCapture;
     document.getElementById('btn-cap-accept').onclick = acceptCapture;
     document.getElementById('btn-cap-finalize').onclick = finalizeCapture;
+
+    // Settings Handlers
+    document.getElementById('btn-scanner-settings').onclick = () => {
+        document.getElementById('scanner-settings-modal').classList.remove('hidden');
+        document.getElementById('setting-scanner-ip').value = scannerIP;
+        document.getElementById('setting-scanner-port').value = scannerPort;
+    };
+
+    document.getElementById('btn-cancel-settings').onclick = () => {
+        document.getElementById('scanner-settings-modal').classList.add('hidden');
+    };
+
+    document.getElementById('btn-reset-settings').onclick = () => {
+        document.getElementById('setting-scanner-ip').value = 'localhost';
+        document.getElementById('setting-scanner-port').value = '8888';
+    };
+
+    document.getElementById('btn-save-settings').onclick = () => {
+        const ip = document.getElementById('setting-scanner-ip').value.trim();
+        const port = document.getElementById('setting-scanner-port').value.trim();
+
+        if (ip && port) {
+            scannerIP = ip;
+            scannerPort = port;
+            localStorage.setItem('scanner_ip', scannerIP);
+            localStorage.setItem('scanner_port', scannerPort);
+
+            document.getElementById('scanner-settings-modal').classList.add('hidden');
+
+            // Reconnect
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+            if (reconnectTimer) { clearInterval(reconnectTimer); reconnectTimer = null; }
+            initCaptureMode();
+        } else {
+            alert("Please enter valid IP and Port");
+        }
+    };
 }
 
 function startCaptureSession(mode) {
@@ -1092,8 +1255,8 @@ function startCaptureSession(mode) {
 
     if (mode === 'slaps') {
         captureSequence = [
-            { id: '14', label: 'Left Slap' },
-            { id: '13', label: 'Right Slap' },
+            { id: '14', label: 'Left 4 Fingers' },
+            { id: '13', label: 'Right 4 Fingers' },
             { id: '15', label: 'Thumbs' }
         ];
     } else {
@@ -1129,8 +1292,6 @@ function updateCaptureUI() {
     listContainer.innerHTML = ''; // Clear
 
     // Progress Labels/Bubbles (Simplified for robustness)
-    // For many steps, maybe just show Current and Next?
-    // Let's create a scrollable list or just active
 
     // Only show current step active
     const currentItem = captureSequence[captureStepIndex];
@@ -1246,6 +1407,7 @@ function skipCapture() {
         capturedPrints[currentItem.id] = "SKIP";
         captureStepIndex++;
         updateCaptureUI();
+        checkExpressAutoAdvance();
     }
 }
 
@@ -1306,6 +1468,15 @@ function acceptCapture() {
         capturedPrints[currentItem.id] = currentCaptureImage;
         captureStepIndex++;
         updateCaptureUI();
+        checkExpressAutoAdvance();
+    }
+}
+
+function checkExpressAutoAdvance() {
+    const isExpress = document.getElementById('chk-express-mode').checked;
+    if (isExpress && captureStepIndex < captureSequence.length) {
+        // Auto-start next capture after a short delay
+        setTimeout(() => startCapture(), 500);
     }
 }
 
@@ -1358,16 +1529,14 @@ async function finalizeCapture() {
             // Create mock boxes for 1-10, 11-14
             boxes = captureSequence.map(item => ({ id: item.id, fp_number: parseInt(item.id), x: 0, y: 0, w: 0, h: 0 }));
         } else {
-            selectedGenMode = 'atf';
-            boxes = [
-                { id: 'L_SLAP', fp_number: 14, x: 0, y: 0, w: 0, h: 0 },
-                { id: 'R_SLAP', fp_number: 13, x: 0, y: 0, w: 0, h: 0 },
-                { id: 'THUMBS', fp_number: 15, x: 0, y: 0, w: 0, h: 0 }
-            ];
+            // Fallback / Default to Rolled if somehow here
+            selectedGenMode = 'rolled';
+            boxes = captureSequence.map(item => ({ id: item.id, fp_number: parseInt(item.id), x: 0, y: 0, w: 0, h: 0 }));
         }
 
         currentAppMode = 'new';
         currentStep = 2;
+        if (typeof applyDemographicDefaults === 'function') applyDemographicDefaults();
 
         navCapture.classList.remove('active');
         sectionCapture.classList.add('hidden');
@@ -1390,32 +1559,32 @@ async function finalizeCapture() {
 
 // 1. Upload EFT
 const eftFileInput = document.getElementById('eft-file-input');
-eftFileInput.addEventListener('change', async (e) => {
-    if (e.target.files.length > 0) {
-        const file = e.target.files[0];
-        e.target.value = ''; // Reset so same file can be selected again
-        const formData = new FormData();
-        formData.append("file", file);
+const eftUploadArea = document.querySelector('#edit-view-upload .upload-area');
 
-        showLoading(true);
-        try {
-            const res = await fetch('/api/upload_eft', { method: 'POST', body: formData });
-            if (!res.ok) throw new Error("Upload failed");
-            const data = await res.json();
+setupUploadZone(eftUploadArea, eftFileInput, handleEftUpload);
 
-            editSessionId = data.session_id;
+async function handleEftUpload(file) {
+    const formData = new FormData();
+    formData.append("file", file);
 
-            // Move to mode selection
-            editViewUpload.classList.add('hidden');
-            editViewMode.classList.remove('hidden');
+    showLoading(true);
+    try {
+        const res = await fetch('/api/upload_eft', { method: 'POST', body: formData });
+        if (!res.ok) throw new Error("Upload failed");
+        const data = await res.json();
 
-        } catch (e) {
-            alert(e.message);
-        } finally {
-            showLoading(false);
-        }
+        editSessionId = data.session_id;
+
+        // Move to mode selection
+        editViewUpload.classList.add('hidden');
+        editViewMode.classList.remove('hidden');
+
+    } catch (e) {
+        alert(e.message);
+    } finally {
+        showLoading(false);
     }
-});
+}
 
 // 2. Mode Selection
 document.getElementById('btn-mode-read').onclick = () => loadEFT(false);
@@ -1737,11 +1906,50 @@ async function saveEFTChanges() {
 }
 
 
-// Init Dropdowns
-async function initDropdowns() {
+// Codes Source Config
+const GITHUB_CODES_URL = "https://raw.githubusercontent.com/Robbbbbbbbb/EFTSuite-Public/refs/heads/main/dynamic/codes.js";
+const LOCAL_CODES_URL = "/static/codes.js";
+
+async function loadCodesJS() {
+    let source = localStorage.getItem('setting_codes_source') || 'github';
+    let url = GITHUB_CODES_URL;
+    let actualSource = "ONLINE"; // ONLINE, CUSTOM, FALLBACK
+
+    if (source === 'custom') {
+        url = localStorage.getItem('setting_custom_codes_url') || "";
+        actualSource = "CUSTOM";
+        if (!url) {
+            console.warn("Custom URL empty, falling back to GitHub");
+            url = GITHUB_CODES_URL;
+            actualSource = "ONLINE";
+        }
+    } else if (source === 'local') {
+        url = LOCAL_CODES_URL;
+        actualSource = "FALLBACK";
+    }
+
+    // Try primary URL
+    let text = await fetchCodes(url);
+
+    // Fallback logic
+    if (!text && source !== 'local') {
+        console.warn(`Failed to load codes from ${url}, falling back to local file.`);
+        if (typeof logToConsole !== 'undefined') logToConsole("Warning: Could not load remote codes.js. Using local fallback.");
+        text = await fetchCodes(LOCAL_CODES_URL);
+        actualSource = "FALLBACK";
+    } else if (!text && source === 'local') {
+        actualSource = "ERROR";
+    }
+
+    updateCodesIndicator(actualSource);
+
+    if (!text) {
+        console.error("Critical: Could not load codes.js from any source.");
+        return;
+    }
+
+    // Process content (Regex + Eval)
     try {
-        const response = await fetch('/static/codes.js');
-        const text = await response.text();
         const parseList = (str) => {
             str = str.trim().replace(/,$/, "");
             if (!str) return [];
@@ -1753,35 +1961,95 @@ async function initDropdowns() {
         match = text.match(/const COUNTRIES = \[\s*([\s\S]*?)\];/);
         const countries = match ? parseList(match[1]) : [];
 
-        const allPob = [...usStates, ...countries];
-        const allCtz = [...usStates, ...countries];
+        populateDropdowns(usStates, countries);
 
-        const pobSelect = document.getElementById('pob-select');
-        const ctzSelect = document.getElementById('ctz-select');
-        const addrStateSelect = document.getElementById('addr-state');
+    } catch (e) {
+        console.error("Error parsing codes.js:", e);
+        updateCodesIndicator("ERROR");
+    }
+}
 
-        const addOpts = (sel, list) => {
-            list.forEach(obj => {
-                const key = Object.keys(obj)[0];
-                const val = obj[key];
-                sel.add(new Option(`${val} (${key})`, key));
-            });
-        };
+function updateCodesIndicator(status) {
+    const el = document.getElementById('codes-source-indicator');
+    if (!el) return;
 
-        addOpts(pobSelect, allPob);
-        addOpts(ctzSelect, allCtz);
-        ctzSelect.value = "US";
-        addOpts(addrStateSelect, usStates);
+    if (status === 'ONLINE') {
+        el.textContent = 'ONLINE (GitHub)';
+        el.style.color = '#27ae60'; // Green
+    } else if (status === 'CUSTOM') {
+        el.textContent = 'CUSTOM URL';
+        el.style.color = '#e67e22'; // Orange
+    } else if (status === 'FALLBACK') {
+        el.textContent = 'FALLBACK (Local)';
+        el.style.color = '#e74c3c'; // Red
+    } else {
+        el.textContent = 'ERROR';
+        el.style.color = 'red';
+    }
+}
 
-        const hSelect = document.getElementById('height-select');
-        for (let h = 400; h <= 711; h++) {
-            let s = h.toString();
-            let ft = s[0];
-            let inch = parseInt(s.substring(1));
-            if (inch <= 11) hSelect.add(new Option(`${ft}' ${inch}"`, h));
-        }
+// Reload Handler
+const btnReload = document.getElementById('btn-reload-codes');
+if (btnReload) {
+    btnReload.onclick = async () => {
+        const originalText = btnReload.textContent;
+        btnReload.textContent = "Loading...";
+        btnReload.disabled = true;
+        await loadCodesJS();
+        btnReload.textContent = originalText;
+        btnReload.disabled = false;
+    };
+}
 
-    } catch (e) { console.error(e); }
+async function fetchCodes(url) {
+    try {
+        // Add timestamp to prevent caching for remote
+        const dummy = url.indexOf('?') === -1 ? `?t=${Date.now()}` : `&t=${Date.now()}`;
+        const fetchUrl = url.startsWith('http') ? url + dummy : url;
+
+        const res = await fetch(fetchUrl, { cache: "no-store" });
+        if (res.ok) return await res.text();
+        return null;
+    } catch (e) {
+        console.error(`Fetch error for ${url}:`, e);
+        return null;
+    }
+}
+
+function populateDropdowns(usStates, countries) {
+    const allPob = [...usStates, ...countries];
+    const allCtz = [...usStates, ...countries];
+
+    const pobSelect = document.getElementById('pob-select');
+    const ctzSelect = document.getElementById('ctz-select');
+    const addrStateSelect = document.getElementById('addr-state');
+
+    // Clear existing options first (in case of re-init)
+    pobSelect.innerHTML = '';
+    ctzSelect.innerHTML = '';
+    addrStateSelect.innerHTML = '';
+
+    const addOpts = (sel, list) => {
+        list.forEach(obj => {
+            const key = Object.keys(obj)[0];
+            const val = obj[key];
+            sel.add(new Option(`${val} (${key})`, key));
+        });
+    };
+
+    addOpts(pobSelect, allPob);
+    addOpts(ctzSelect, allCtz);
+    ctzSelect.value = "US";
+    addOpts(addrStateSelect, usStates);
+
+    const hSelect = document.getElementById('height-select');
+    hSelect.innerHTML = ''; // Clear
+    for (let h = 400; h <= 711; h++) {
+        let s = h.toString();
+        let ft = s[0];
+        let inch = parseInt(s.substring(1));
+        if (inch <= 11) hSelect.add(new Option(`${ft}' ${inch}"`, h));
+    }
 }
 
 const sentenceCase = (str) => {
@@ -1816,7 +2084,7 @@ function showLoading(show) {
 }
 
 // Start
-initDropdowns();
+loadCodesJS();
 updateWizardUI();
 checkLatestVersion();
 
@@ -1832,7 +2100,7 @@ async function checkLatestVersion() {
             // Parse Markdown and remove wrapping <p> tags if present
             const html = marked.parse(ver);
             // marked.parse wraps inline content in <p> by default, which breaks layout in the footer span.
-            // We strip the <p> tags to keep it inline.
+            // Strip the <p> tags to keep it inline.
             el.innerHTML = html.replace(/^<p>|<\/p>\s*$/g, "");
 
             // Open links in new tab
@@ -1845,5 +2113,298 @@ async function checkLatestVersion() {
         }
     } catch (e) {
         el.textContent = "Error";
+    }
+}
+
+// PDF Selection Logic
+function renderPdfSelection(pages) {
+    const container = document.getElementById('pdf-pages-container');
+    container.innerHTML = '';
+
+    pages.forEach((b64, index) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'mode-selection-card'; // Reuse style
+        wrapper.style.padding = '10px';
+        wrapper.style.width = '150px';
+
+        const img = document.createElement('img');
+        img.src = "data:image/png;base64," + b64;
+        img.style.width = '100%';
+        img.style.height = 'auto';
+        img.style.border = '1px solid #555';
+        img.style.marginBottom = '10px';
+
+        const label = document.createElement('div');
+        label.innerText = `Page ${index + 1}`;
+
+        wrapper.appendChild(img);
+        wrapper.appendChild(label);
+
+        wrapper.onclick = () => selectPdfPage(index);
+
+        container.appendChild(wrapper);
+    });
+}
+
+document.getElementById('btn-cancel-pdf').onclick = () => {
+    window.location.reload();
+};
+
+async function selectPdfPage(index) {
+    showLoading(true);
+    try {
+        const res = await fetch('/api/select_pdf_page', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, page_index: index })
+        });
+
+        if (!res.ok) throw new Error("Page selection failed");
+        const data = await res.json();
+
+        cropImage.onload = () => {
+            currentSubStep = 'crop';
+            updateWizardUI();
+            requestAnimationFrame(initCropStep);
+        };
+        cropImage.src = "data:image/png;base64," + data.image_base64;
+
+    } catch (e) {
+        alert(e.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+
+// Warning Handlers
+document.getElementById('btn-warn-back').onclick = () => {
+    window.location.reload();
+};
+
+document.getElementById('btn-warn-proceed').onclick = () => {
+    if (pendingImageData) {
+        const data = pendingImageData;
+
+        if (data.type === 'pdf_selection') {
+            currentSubStep = 'pdf_select';
+            renderPdfSelection(data.pages);
+            updateWizardUI();
+            return;
+        }
+
+        cropImage.onload = () => {
+            currentSubStep = 'crop';
+            updateWizardUI();
+            requestAnimationFrame(initCropStep);
+        };
+        cropImage.src = "data:image/png;base64," + data.image_base64;
+    }
+};
+
+function mirrorBase64(b64) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL().split(',')[1]);
+        };
+        img.src = "data:image/png;base64," + b64;
+    });
+}
+
+// SETTINGS LOGIC
+
+// Variables
+let showCapturePrints = localStorage.getItem('setting_show_capture') !== 'false'; // Default true
+let enableType14 = localStorage.getItem('setting_enable_type14') === 'true'; // Default false
+let defaultBypassSSN = localStorage.getItem('setting_default_bypass_ssn') !== 'false'; // Default true
+
+// Elements
+const chkShowCapture = document.getElementById('setting-show-capture');
+const inputConfigIp = document.getElementById('setting-config-ip');
+const inputConfigPort = document.getElementById('setting-config-port');
+const btnSaveConfig = document.getElementById('btn-save-config');
+const chkEnableType14 = document.getElementById('setting-enable-type14');
+const chkDefaultBypassSSN = document.getElementById('setting-default-bypass-ssn');
+const btnGenAtf = document.getElementById('btn-gen-atf');
+
+function initSettingsPage() {
+    // Load current values
+    if (chkShowCapture) chkShowCapture.checked = showCapturePrints;
+    if (inputConfigIp) inputConfigIp.value = scannerIP;
+    if (inputConfigPort) inputConfigPort.value = scannerPort;
+    if (chkEnableType14) chkEnableType14.checked = enableType14;
+    if (chkDefaultBypassSSN) chkDefaultBypassSSN.checked = defaultBypassSSN;
+}
+
+const btnCapModeSlaps = document.getElementById('btn-cap-mode-slaps');
+
+function applySettings() {
+    // Display Options
+    if (navCapture) {
+        if (showCapturePrints) {
+            navCapture.style.display = 'block';
+        } else {
+            navCapture.style.display = 'none';
+        }
+    }
+
+    // Type-14 Logic (New EFT)
+    if (btnGenAtf) {
+        const small = btnGenAtf.querySelector('div'); // The red text
+        if (enableType14) {
+            btnGenAtf.style.opacity = '1.0';
+            btnGenAtf.style.cursor = 'pointer';
+            if (small) small.style.display = 'none';
+        } else {
+            btnGenAtf.style.opacity = '0.5';
+            btnGenAtf.style.cursor = 'not-allowed';
+            if (small) small.style.display = 'block';
+        }
+    }
+
+    // Type-14 Logic (Capture Prints)
+    if (btnCapModeSlaps) {
+        if (enableType14) {
+            btnCapModeSlaps.style.display = 'block';
+        } else {
+            btnCapModeSlaps.style.display = 'none';
+        }
+    }
+}
+
+// Event Listeners
+if (chkShowCapture) {
+    chkShowCapture.onchange = (e) => {
+        showCapturePrints = e.target.checked;
+        localStorage.setItem('setting_show_capture', showCapturePrints);
+        applySettings();
+    };
+}
+
+if (chkEnableType14) {
+    chkEnableType14.onchange = (e) => {
+        enableType14 = e.target.checked;
+        localStorage.setItem('setting_enable_type14', enableType14);
+        applySettings();
+    };
+}
+
+if (chkDefaultBypassSSN) {
+    chkDefaultBypassSSN.onchange = (e) => {
+        defaultBypassSSN = e.target.checked;
+        localStorage.setItem('setting_default_bypass_ssn', defaultBypassSSN);
+    };
+}
+
+// Codes Configuration Logic
+const radioCodesOptions = document.getElementsByName('codes-source');
+const inputCustomCodesUrl = document.getElementById('setting-custom-codes-url');
+const customCodesContainer = document.getElementById('custom-codes-url-container');
+
+// Init values
+const currentCodesSource = localStorage.getItem('setting_codes_source') || 'github';
+radioCodesOptions.forEach(r => {
+    if (r.value === currentCodesSource) r.checked = true;
+
+    r.onchange = (e) => {
+        const val = e.target.value;
+        localStorage.setItem('setting_codes_source', val);
+        applyCodesSettings(val);
+        // Reload codes immediately
+        loadCodesJS();
+        alert("Codes source updated. Data reloaded.");
+    };
+});
+
+if (inputCustomCodesUrl) {
+    inputCustomCodesUrl.value = localStorage.getItem('setting_custom_codes_url') || "";
+    inputCustomCodesUrl.onchange = (e) => {
+        localStorage.setItem('setting_custom_codes_url', e.target.value.trim());
+        // Reload if Custom is selected
+        if (localStorage.getItem('setting_codes_source') === 'custom') {
+            loadCodesJS();
+            alert("Custom URL updated. Data reloaded.");
+        }
+    };
+}
+
+function applyCodesSettings(val) {
+    if (val === 'custom') {
+        customCodesContainer.style.display = 'block';
+    } else {
+        customCodesContainer.style.display = 'none';
+    }
+}
+applyCodesSettings(currentCodesSource);
+
+if (btnSaveConfig) {
+    btnSaveConfig.onclick = () => {
+        const ip = inputConfigIp.value.trim();
+        const port = inputConfigPort.value.trim();
+
+        if (ip && port) {
+            scannerIP = ip;
+            scannerPort = port;
+            localStorage.setItem('scanner_ip', scannerIP);
+            localStorage.setItem('scanner_port', scannerPort);
+
+            // Update the modal inputs too, if they exist
+            const modalIp = document.getElementById('setting-scanner-ip');
+            const modalPort = document.getElementById('setting-scanner-port');
+            if (modalIp) modalIp.value = scannerIP;
+            if (modalPort) modalPort.value = scannerPort;
+
+            // Show success feedback
+            const originalText = btnSaveConfig.textContent;
+            btnSaveConfig.textContent = "Saved!";
+            btnSaveConfig.style.background = '#27ae60';
+            setTimeout(() => {
+                btnSaveConfig.textContent = originalText;
+                btnSaveConfig.style.background = ''; // Revert to CSS default
+            }, 1500);
+
+        } else {
+            alert("Please enter valid IP and Port");
+        }
+    };
+}
+
+// Overwrite Type-14 click handler
+if (btnGenAtf) {
+    btnGenAtf.onclick = () => {
+        if (!enableType14) return;
+
+        selectedGenMode = 'atf';
+        boxes = getBoxesForMode('atf');
+        currentSubStep = 'box';
+        updateWizardUI();
+        requestAnimationFrame(initVerifyStep);
+    };
+}
+
+if (btnCapModeSlaps) {
+    btnCapModeSlaps.onclick = () => startCaptureSession('slaps');
+}
+
+// Initialize on Load
+applySettings();
+initSettingsPage();
+
+function applyDemographicDefaults() {
+    if (defaultBypassSSN) {
+        const chk = document.getElementById('bypass-ssn');
+        if (chk && !chk.checked) {
+            chk.checked = true;
+            // Trigger change event to update UI state (disable input)
+            chk.dispatchEvent(new Event('change'));
+        }
     }
 }

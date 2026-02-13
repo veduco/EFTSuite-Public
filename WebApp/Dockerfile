@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     libopenjp2-7-dev \
     libopenjp2-tools \
     zlib1g-dev \
+    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -43,13 +44,17 @@ RUN ls -l /usr/local/bin
 ENV PATH="/usr/local/bin:${PATH}"
 
 # Install Python dependencies
-RUN pip install --no-cache-dir fastapi uvicorn python-multipart opencv-python-headless numpy imutils pillow jinja2
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Create directory for temp files
 RUN mkdir -p /app/temp
 
 # Expose port
 EXPOSE 8080
+
+# Send SIGKILL on container stop
+STOPSIGNAL SIGKILL
 
 # Command to run the application
 # If the app fails, the container will stay running for debugging.
