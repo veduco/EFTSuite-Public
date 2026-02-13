@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm
+FROM python:3.11.14-trixie@sha256:8999a3987fa4c44ed479c07a8fe6921a9168454d4b9b49c3f41fda5db3beb4fa
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
