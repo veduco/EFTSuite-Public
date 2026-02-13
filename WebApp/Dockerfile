@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     libopenjp2-7-dev \
     libopenjp2-tools \
     zlib1g-dev \
+    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
