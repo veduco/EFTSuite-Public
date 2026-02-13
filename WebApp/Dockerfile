@@ -53,6 +53,9 @@ RUN mkdir -p /app/temp
 # Expose port
 EXPOSE 8080
 
+# Send SIGKILL on container stop
+STOPSIGNAL SIGKILL
+
 # Command to run the application
 # If the app fails, the container will stay running for debugging.
 CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 8080 || tail -f /dev/null"]
