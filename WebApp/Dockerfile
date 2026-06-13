@@ -1,4 +1,4 @@
-FROM python:3.11.15-slim-trixie@sha256:f9fa7f851e38bfb19c9de3afbc4b86ae7176ea7aaf94535c31df5458d5849457
+FROM python:3.14.6-slim-trixie@sha256:c79315c9ba2403aecb221fb9090486be9af43cdc2372959ca7ccf6b17ebe9912
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
