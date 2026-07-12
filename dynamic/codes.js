@@ -186,7 +186,7 @@ const COUNTRIES = [
     {"IO": "Indonesia"},
     {"IQ": "Iraq"},
     {"IR": "Iran"},
-    {"US": "Israel"},
+    {"IS": "Israel"},
     {"IT": "Italy"},
     {"JA": "Japan"},
     {"OC": "Macau"},
